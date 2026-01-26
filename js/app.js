@@ -23,7 +23,7 @@ const AVATARS = {
   "Gaga": "./img/gaga.png",
   "Qnko": "./img/qnko.png",
   "Lx7ss": "./img/lx7ss.png",
-  //"Badema": "./img/badema.png",
+   //"Badema": "./img/badema.png",
   "SpeciAL": "./img/special.png",
   "Decade": "./img/decade.png",
   "Giox": "./img/giox.png",
