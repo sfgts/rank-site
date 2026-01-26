@@ -8,30 +8,30 @@ const DELTA_DIGITS = 1;
 // Сейчас: если не найдено — генерим аватар через ui-avatars.com по нику.
 
 const AVATARS = {
-  "Pavlinho19": "img/pavlinho19.png",
-  "Hyper": "img/hyper.png",
-  "Vuksha": "img/vuksha.png",
-  "Maxa": "img/maxa.png",
-  "borees": "img/borees.png",
-  "Lelool_Pepsi": "img/lelool_Pepsi.png",
-  "KaBuA": "img/kaluba.png",
-  "Sef": "img/sef.png",
-  "Christian05": "img/christian05.png",
-  "Rodja": "img/rodja.png",
-  "Duka": "img/duka.png",
-  "Lumix": "img/lumix.png",
-  "BlueEyes": "img/blueeyes.png",
-  "Gaga": "img/gaga.png",
-  "Onko": "img/onko.png",
-  "Lx7ss": "img/lx7ss.png",
-  "SpeciAL": "img/special.png",
-  "Decade": "img/decade.png",
-  "Giox": "img/giox.png",
-  "Kriso": "img/kriso.png",
-  "Totti": "img/totti.png",
-  "Noltzer": "img/noltzer.png",
-  "maggetto": "img/maggetto.png",
-  "Malenkiy": "img/malenkiy.png"
+  "Pavlinho19": "img/Pavlinho19.png",
+  "Hyper": "img/Hyper.png",
+  "Vuksha": "img/Vuksha.png",
+  "Maxa": "img/Maxa.png",
+  "borees": "img/borees.png", // ник с маленькой — оставляем так
+  "Lelool_Pepsi": "img/Lelool_Pepsi.png",
+  "KaBuA": "img/KaBuA.png",
+  "Sef": "img/Sef.png",
+  "Christian05": "img/Christian05.png",
+  "Rodja": "img/Rodja.png",
+  "Duka": "img/Duka.png",
+  "Lumix": "img/Lumix.png",
+  "BlueEyes": "img/BlueEyes.png",
+  "Gaga": "img/Gaga.png",
+  "Onko": "img/Onko.png",
+  "Lx7ss": "img/Lx7ss.png",
+  "SpeciAL": "img/SpeciAL.png",
+  "Decade": "img/Decade.png",
+  "Giox": "img/Giox.png",
+  "Kriso": "img/Kriso.png",
+  "Totti": "img/Totti.png",
+  "Noltzer": "img/Noltzer.png",
+  "maggetto": "img/maggetto.png", // ник с маленькой
+  "Malenkiy": "img/Malenkiy.png"
 };
 
 
