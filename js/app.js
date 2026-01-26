@@ -6,33 +6,34 @@ const DELTA_DIGITS = 1;
 
 // (ФОТО) Можно потом заменить на реальные ссылки / локальные файлы.
 // Сейчас: если не найдено — генерим аватар через ui-avatars.com по нику.
+
 const AVATARS = {
-  "Pavlinho19": "./img/pavlinho19.png",
-  "Hyper": "./img/hyper.png",
-  "Vuksha": "./img/vuksha.png",
-  "Maxa": "./img/maxa.png",
-  "borees": "./img/borees.png",
-  "Leolol_Pepsi": "./img/leolol_Pepsi.png",
-  "KaLuBa": "./img/kaluba.png",
-  "Sef": "./img/sef.png",
-  "Hristian05": "./img/hristian05.png",
-  "Rodja": "./img/rodja.png",
-  "Duka": "./img/duka.png",
-  "Lumix": "./img/lumix.png",
-  "BlueEyes": "./img/blueeyes.png",
-  "Gaga": "./img/gaga.png",
-  "Qnko": "./img/qnko.png",
-  "Lx7ss": "./img/lx7ss.png",
-   //"Badema": "./img/badema.png",
-  "SpeciAL": "./img/special.png",
-  "Decade": "./img/decade.png",
-  "Giox": "./img/giox.png",
-  "Kriso": "./img/kriso.png",
-  "Totti": "./img/totti.png",
-  "Noltzer": "./img/noltzer.png",
-  "maggett0": "./img/maggett0.png",
-  "Malenkiy": "./img/malenkiy.png"
+  "Pavlinho19": "img/pavlinho19.png",
+  "Hyper": "img/hyper.png",
+  "Vuksha": "img/vuksha.png",
+  "Maxa": "img/maxa.png",
+  "borees": "img/borees.png",
+  "Lelool_Pepsi": "img/lelool_Pepsi.png",
+  "KaBuA": "img/kaluba.png",
+  "Sef": "img/sef.png",
+  "Christian05": "img/christian05.png",
+  "Rodja": "img/rodja.png",
+  "Duka": "img/duka.png",
+  "Lumix": "img/lumix.png",
+  "BlueEyes": "img/blueeyes.png",
+  "Gaga": "img/gaga.png",
+  "Onko": "img/onko.png",
+  "Lx7ss": "img/lx7ss.png",
+  "SpeciAL": "img/special.png",
+  "Decade": "img/decade.png",
+  "Giox": "img/giox.png",
+  "Kriso": "img/kriso.png",
+  "Totti": "img/totti.png",
+  "Noltzer": "img/noltzer.png",
+  "maggetto": "img/maggetto.png",
+  "Malenkiy": "img/malenkiy.png"
 };
+
 
 // ================== GROUPS ==================
 // thresholds: minRating for group
