@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>ESportsBattle Rank</title>
+  <link rel="stylesheet" href="./css/styles.css" />
+</head>
+<body>
+
+<header class="topbar">
+  <div class="container topbar-row">
+    <div>
+      <h1>ESportsBattle Rank</h1>
+      <p class="subtitle">Public leaderboard and player rating history</p>
+    </div>
+
+    <div class="actions">
+      <input id="search" type="search" placeholder="Search by nickname..." />
+      <button id="refresh">Refresh</button>
+    </div>
+  </div>
+</header>
+
+<main class="container grid">
+
+  <!-- Leaderboard -->
+  <section class="card">
+    <h2>Leaderboard</h2>
+
+    <table id="leaderboard">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Player</th>
+          <th class="right">Rating</th>
+          <th id="deltaHeader" class="right">Δ 7d</th>
+          <th class="right">Δ 1d</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </section>
+
+  <!-- Player profile -->
+  <section class="card">
+    <div class="card-head">
+      <h2 id="profileTitle">Select a player</h2>
+
+      <div id="periodSwitch" class="periodSwitch">
+        <button data-days="7" class="active">7d</button>
+        <button data-days="14">14d</button>
+        <button data-days="30">30d</button>
+      </div>
+    </div>
+
+    <div class="stats">
+      <div class="stat">
+        <span>Current rating</span>
+        <strong id="currentRating">—</strong>
+      </div>
+
+      <div class="stat">
+        <span id="deltaLabel">Change (7 days)</span>
+        <strong id="delta7">—</strong>
+      </div>
+
+      <div class="stat">
+        <span>Change (1 day)</span>
+        <strong id="delta1">—</strong>
+      </div>
+
+      <div class="stat">
+        <span>Data points</span>
+        <strong id="pointsCount">—</strong>
+      </div>
+    </div>
+
+    <canvas id="chart" width="800" height="300"></canvas>
+
+    <h3>History</h3>
+    <ul id="history"></ul>
+  </section>
+
+  <!-- Avatar / Photo block (твой красный квадрат) -->
+  <section class="card photoCard">
+    <h2>Player photo</h2>
+
+    <div class="photoWrap">
+      <img id="playerPhoto" alt="Player photo" />
+    </div>
+
+    <div class="photoMeta">
+        <div class="photoNick" id="photoNick">—</div>
+
+        <div class="photoGroup" id="photoGroupRow">
+            <span class="groupDot" id="groupDot"></span>
+             <span class="groupName" id="groupName">—</span>
+    </div>
+
+    <div class="photoHint"></div>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <span>v0.2 — live JSON data</span>
+</footer>
+
+<script src="./js/app.js"></script>
+</body>
+</html>
