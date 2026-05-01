@@ -16,6 +16,7 @@ const CONFIG = Object.freeze({
 const SUPABASE = Object.freeze({
   URL: "https://vgmwxtpsbwzeqwtpxamo.supabase.co",
   KEY: "sb_publishable_RjvZCtsriMO6nGDASJkcbg_estuVZyq",
+  BUCKET: "player-avatars",
 });
 
 /* Static rating groups (admin removed — values fixed in code). */
@@ -27,17 +28,6 @@ const GROUPS = Object.freeze([
   { name: "World Class",  min:  750, color: "#b8b8b8" },
   { name: "Professional", min:    0, color: "#7ec8ce" },
 ]);
-
-/* Manual nick → file overrides for cases where image filename
- * differs from the player nickname returned by the API.
- * If a nick is not listed, we fall back to `img/<nick>.png`. */
-const AVATAR_OVERRIDES = Object.freeze({
-  Lelool_Pepsi: "img/Leolol_Pepsi.png",
-  KaBuA:        "img/KaLuBa.png",
-  Christian05:  "img/Hristian05.png",
-  Onko:         "img/Qnko.png",
-  maggetto:     "img/maggett0.png",
-});
 
 /* ================== DOM REFS ================== */
 const $ = (id) => document.getElementById(id);
@@ -60,10 +50,11 @@ const els = {
   chartTip:      $("chartTip"),
   periodButtons: document.querySelectorAll("#periodSwitch button"),
 
-  playerPhoto:   $("playerPhoto"),
-  photoNick:     $("photoNick"),
-  groupDot:      $("groupDot"),
-  groupName:     $("groupName"),
+  playerPhoto:        $("playerPhoto"),
+  photoNick:          $("photoNick"),
+  groupDot:           $("groupDot"),
+  groupName:          $("groupName"),
+  playerAchievements: $("playerAchievements"),
 };
 
 /* ================== STATE ================== */
@@ -123,18 +114,22 @@ async function init() {
 async function loadData() {
   setLoading(true);
   try {
-    const data = await loadJSONP(CONFIG.DATA_URL);
-
-    try {
-      const res = await fetch(
+    // Load JSONP and Supabase hidden list in parallel — neither blocks the other
+    const [dataResult, hiddenResult] = await Promise.allSettled([
+      loadJSONP(CONFIG.DATA_URL),
+      fetch(
         `${SUPABASE.URL}/rest/v1/hidden_players?select=nick`,
         { headers: { apikey: SUPABASE.KEY, Authorization: `Bearer ${SUPABASE.KEY}` } }
-      );
-      const rows = await res.json();
-      state.hiddenNicks = new Set(Array.isArray(rows) ? rows.map((r) => r.nick) : []);
-    } catch {
-      state.hiddenNicks = new Set();
-    }
+      ).then((r) => r.json()),
+    ]);
+
+    if (dataResult.status === "rejected") throw dataResult.reason;
+
+    const data = dataResult.value;
+    const hiddenRows = hiddenResult.status === "fulfilled" && Array.isArray(hiddenResult.value)
+      ? hiddenResult.value
+      : [];
+    state.hiddenNicks = new Set(hiddenRows.map((r) => r.nick));
 
     state.players = (data?.players ?? []).map((p) => ({
       nick: String(p.nick),
@@ -277,6 +272,7 @@ function selectPlayer(p) {
 
   setPlayerPhoto(p.nick);
   setPlayerGroup(lastRating);
+  loadAndRenderAchievements(p.nick);
 
   const seriesWindow = sliceByDays(p.series, state.periodDays);
   renderHistory(seriesWindow);
@@ -286,13 +282,18 @@ function selectPlayer(p) {
 /* ================== PHOTO + GROUP ================== */
 function setPlayerPhoto(nick) {
   if (!els.playerPhoto) return;
-  const url = avatarUrlForNick(nick);
-  els.playerPhoto.src = url;
+  const supUrl = `${SUPABASE.URL}/storage/v1/object/public/${SUPABASE.BUCKET}/${encodeURIComponent(nick)}.png`;
+  const uiUrl  = `https://ui-avatars.com/api/?name=${encodeURIComponent(nick)}&background=0b1f17&color=35c07a&size=512&bold=true&format=png`;
+
   els.playerPhoto.alt = `Photo of ${nick}`;
+  els.playerPhoto.src = supUrl;
+
+  // Fallback: Supabase → ui-avatars (initials)
   els.playerPhoto.onerror = () => {
     els.playerPhoto.onerror = null;
-    els.playerPhoto.src = avatarUrlFallback(nick);
+    els.playerPhoto.src = uiUrl;
   };
+
   if (els.photoNick) els.photoNick.textContent = nick;
 }
 
@@ -305,13 +306,59 @@ function setPlayerGroup(rating) {
   }
 }
 
-function avatarUrlForNick(nick) {
-  return AVATAR_OVERRIDES[nick] ?? `img/${encodeURIComponent(nick)}.png`;
+/* ================== ACHIEVEMENTS ================== */
+async function loadAndRenderAchievements(nick) {
+  if (!els.playerAchievements) return;
+  els.playerAchievements.innerHTML = "";
+
+  try {
+    // Get achievement IDs for this player
+    const paRes = await fetch(
+      `${SUPABASE.URL}/rest/v1/player_achievements?nick=eq.${encodeURIComponent(nick)}&select=achievement_id`,
+      { headers: { apikey: SUPABASE.KEY, Authorization: `Bearer ${SUPABASE.KEY}` } }
+    );
+    const paRows = await paRes.json();
+    if (!Array.isArray(paRows) || !paRows.length) return;
+
+    const ids = paRows.map((r) => r.achievement_id).join(",");
+
+    // Get achievement details
+    const achRes = await fetch(
+      `${SUPABASE.URL}/rest/v1/achievements?id=in.(${ids})&select=id,name,icon_url,url`,
+      { headers: { apikey: SUPABASE.KEY, Authorization: `Bearer ${SUPABASE.KEY}` } }
+    );
+    const achievements = await achRes.json();
+    if (!Array.isArray(achievements) || !achievements.length) return;
+
+    renderAchievements(achievements);
+  } catch (e) {
+    console.warn("Achievements load failed:", e);
+  }
 }
 
-function avatarUrlFallback(nick) {
-  const safe = encodeURIComponent(nick);
-  return `https://ui-avatars.com/api/?name=${safe}&background=0b1f17&color=35c07a&size=512&bold=true&format=png`;
+function renderAchievements(achievements) {
+  if (!els.playerAchievements) return;
+  els.playerAchievements.innerHTML = "";
+
+  achievements.forEach((ach) => {
+    const inner =
+      `<img src="${ach.icon_url}" alt="${escapeHtml(ach.name)}" loading="lazy" />` +
+      `<span class="ach-badge-tip">${escapeHtml(ach.name)}</span>`;
+
+    let badge;
+    if (ach.url) {
+      badge = document.createElement("a");
+      badge.href = ach.url;
+      badge.target = "_blank";
+      badge.rel = "noopener noreferrer";
+      badge.className = "ach-badge ach-badge--link";
+    } else {
+      badge = document.createElement("div");
+      badge.className = "ach-badge";
+    }
+    badge.innerHTML = inner;
+    els.playerAchievements.appendChild(badge);
+  });
 }
 
 /* ================== HISTORY ================== */

@@ -19,6 +19,7 @@
     <div class="actions">
       <input id="search" type="search" placeholder="Search by nickname..." aria-label="Search players" autocomplete="off" />
       <button id="refresh" class="btn" type="button" aria-label="Refresh data">Refresh</button>
+      <a id="adminLink" href="./admin.html" class="btn" style="display:none;text-decoration:none;" title="Admin panel">Admin</a>
     </div>
   </div>
 </header>
@@ -94,6 +95,7 @@
         <span class="groupDot" id="groupDot" aria-hidden="true"></span>
         <span class="groupName" id="groupName">—</span>
       </div>
+      <div id="playerAchievements" class="player-achievements"></div>
     </div>
   </section>
 </main>
@@ -103,5 +105,14 @@
 </footer>
 
 <script src="./js/app.js" defer></script>
+<script>
+  (function() {
+    var m = document.cookie.match("(?:^|; )esb_admin=([^;]*)");
+    if (m && m[1]) {
+      var el = document.getElementById("adminLink");
+      if (el) el.style.display = "";
+    }
+  })();
+</script>
 </body>
 </html>
