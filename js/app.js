@@ -13,6 +13,11 @@ const CONFIG = Object.freeze({
   CHART_ANIM_MS: 600,
 });
 
+const SUPABASE = Object.freeze({
+  URL: "https://vgmwxtpsbwzeqwtpxamo.supabase.co",
+  KEY: "sb_publishable_RjvZCtsriMO6nGDASJkcbg_estuVZyq",
+});
+
 /* Static rating groups (admin removed — values fixed in code). */
 const GROUPS = Object.freeze([
   { name: "Legend",       min: 1250, color: "#e53a2e" },
@@ -64,6 +69,7 @@ const els = {
 /* ================== STATE ================== */
 const state = {
   players: [],
+  hiddenNicks: new Set(),
   selected: null,
   periodDays: 7,
   globalRows: [],
@@ -118,6 +124,18 @@ async function loadData() {
   setLoading(true);
   try {
     const data = await loadJSONP(CONFIG.DATA_URL);
+
+    try {
+      const res = await fetch(
+        `${SUPABASE.URL}/rest/v1/hidden_players?select=nick`,
+        { headers: { apikey: SUPABASE.KEY, Authorization: `Bearer ${SUPABASE.KEY}` } }
+      );
+      const rows = await res.json();
+      state.hiddenNicks = new Set(Array.isArray(rows) ? rows.map((r) => r.nick) : []);
+    } catch {
+      state.hiddenNicks = new Set();
+    }
+
     state.players = (data?.players ?? []).map((p) => ({
       nick: String(p.nick),
       series: (p.series ?? [])
@@ -177,6 +195,7 @@ function getGroupByRating(rating) {
 /* ================== RANKING ================== */
 function buildGlobalRanking() {
   state.globalRows = state.players
+    .filter((p) => !state.hiddenNicks.has(p.nick))
     .map((p) => ({
       ...p,
       rating: p.series.at(-1)?.rating ?? null,

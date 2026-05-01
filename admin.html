@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ESB — Admin Panel</title>
+  <link rel="stylesheet" href="./css/styles.css" />
+  <style>
+    /* ===== Login ===== */
+    .login-screen {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .login-card {
+      width: 100%;
+      max-width: 360px;
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius-lg);
+      padding: 32px;
+      box-shadow: var(--shadow-card);
+      animation: fadeIn 320ms var(--ease) both;
+    }
+    .login-card h2 { margin: 0 0 4px; font-size: 22px; }
+    .login-sub { opacity: 0.6; font-size: 13px; margin: 0 0 24px; }
+    .field { margin-bottom: 16px; }
+    .field label {
+      display: block;
+      font-size: 12px;
+      opacity: 0.7;
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .field input[type=password] {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--soft-border);
+      background: var(--soft-bg);
+      color: inherit;
+      font: inherit;
+      font-size: 15px;
+      outline: none;
+      transition: border-color var(--t) var(--ease), box-shadow var(--t) var(--ease);
+    }
+    .field input[type=password]:focus {
+      border-color: var(--accent-border);
+      box-shadow: 0 0 0 3px rgba(53, 192, 122, 0.15);
+    }
+    .btn-primary {
+      width: 100%;
+      padding: 12px;
+      border-radius: var(--radius-sm);
+      border: none;
+      background: var(--accent);
+      color: #0b0f14;
+      font: inherit;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background var(--t) var(--ease), transform var(--t) var(--ease);
+    }
+    .btn-primary:hover { background: #43d088; }
+    .btn-primary:active { transform: translateY(1px); }
+    .error-msg { color: #ff7676; font-size: 13px; margin: 0 0 12px; }
+
+    /* ===== Panel ===== */
+    .admin-header {
+      padding: 16px 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      background: rgba(11, 15, 20, 0.6);
+    }
+    .admin-header-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .admin-title { margin: 0; font-size: 20px; }
+
+    .stats-bar { display: flex; gap: 12px; flex-wrap: wrap; margin: 16px 0; }
+    .stat-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px;
+      border-radius: 99px;
+      background: var(--soft-bg);
+      border: 1px solid var(--card-border);
+      font-size: 13px;
+    }
+    .stat-pill .count { font-weight: 700; font-variant-numeric: tabular-nums; }
+    .stat-pill.hidden-pill {
+      border-color: rgba(255, 118, 118, 0.35);
+      background: rgba(255, 118, 118, 0.08);
+    }
+    .stat-pill.hidden-pill .count { color: #ff7676; }
+
+    .admin-search { margin-bottom: 12px; }
+    .admin-search input {
+      width: 100%;
+      padding: 10px 14px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--soft-border);
+      background: var(--soft-bg);
+      color: inherit;
+      font: inherit;
+      outline: none;
+      transition: border-color var(--t) var(--ease), box-shadow var(--t) var(--ease);
+    }
+    .admin-search input:focus {
+      border-color: var(--accent-border);
+      box-shadow: 0 0 0 3px rgba(53, 192, 122, 0.15);
+    }
+
+    .player-list { display: flex; flex-direction: column; gap: 8px; padding-bottom: 32px; }
+
+    .player-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 10px 14px;
+      border-radius: var(--radius-md);
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      transition: background var(--t) var(--ease), border-color var(--t) var(--ease), opacity var(--t) var(--ease);
+    }
+    .player-row--hidden {
+      opacity: 0.45;
+      background: rgba(255, 118, 118, 0.04);
+      border-color: rgba(255, 118, 118, 0.2);
+    }
+    .player-row-info { display: flex; align-items: center; gap: 12px; min-width: 0; }
+    .player-row-avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      object-fit: cover;
+      border: 1px solid var(--card-border);
+      flex-shrink: 0;
+      background: rgba(0, 0, 0, 0.25);
+    }
+    .player-row-nick {
+      font-weight: 600;
+      font-size: 14px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .player-row-rating { font-size: 12px; opacity: 0.6; font-variant-numeric: tabular-nums; }
+
+    /* Toggle switch */
+    .toggle { display: flex; align-items: center; gap: 8px; cursor: pointer; flex-shrink: 0; }
+    .toggle input { position: absolute; opacity: 0; width: 0; height: 0; }
+    .toggle-track {
+      position: relative;
+      width: 44px;
+      height: 24px;
+      border-radius: 99px;
+      background: rgba(255, 118, 118, 0.3);
+      border: 1px solid rgba(255, 118, 118, 0.4);
+      transition: background var(--t) var(--ease), border-color var(--t) var(--ease);
+      flex-shrink: 0;
+    }
+    .toggle input:checked + .toggle-track {
+      background: rgba(53, 192, 122, 0.25);
+      border-color: var(--accent-border);
+    }
+    .toggle-thumb {
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: #ff7676;
+      transition: transform var(--t) var(--ease), background var(--t) var(--ease);
+    }
+    .toggle input:checked + .toggle-track .toggle-thumb {
+      transform: translateX(20px);
+      background: var(--accent);
+    }
+    .toggle-label { font-size: 13px; opacity: 0.75; width: 52px; }
+
+    .loading-msg { opacity: 0.6; padding: 24px 0; text-align: center; font-size: 14px; }
+  </style>
+</head>
+<body>
+
+<!-- LOGIN SCREEN -->
+<div id="loginSection" class="login-screen">
+  <div class="login-card">
+    <h2>ESB Admin</h2>
+    <p class="login-sub">Player visibility management</p>
+    <p id="loginError" class="error-msg" hidden>Incorrect password</p>
+    <div class="field">
+      <label for="passwordInput">Password</label>
+      <input id="passwordInput" type="password" placeholder="Enter password..." autocomplete="current-password" />
+    </div>
+    <button id="loginBtn" class="btn-primary" type="button">Log in</button>
+  </div>
+</div>
+
+<!-- ADMIN PANEL -->
+<div id="panelSection" hidden>
+  <header class="admin-header">
+    <div class="container admin-header-row">
+      <h1 class="admin-title">ESB Admin — Player Visibility</h1>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <a href="./index.html" class="btn" style="text-decoration:none;font-size:13px;">← Back to site</a>
+        <button id="logoutBtn" class="btn" type="button" style="font-size:13px;">Log out</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="container" style="padding-top:16px;">
+    <div class="stats-bar">
+      <span class="stat-pill">
+        <span>Visible:</span>
+        <span class="count" id="totalVisible">—</span>
+      </span>
+      <span class="stat-pill hidden-pill">
+        <span>Hidden:</span>
+        <span class="count" id="totalHidden">0</span>
+      </span>
+    </div>
+
+    <div class="admin-search">
+      <input id="adminSearch" type="search" placeholder="Search by nickname..." autocomplete="off" />
+    </div>
+
+    <div id="playerList" class="player-list">
+      <p class="loading-msg">Loading…</p>
+    </div>
+  </main>
+</div>
+
+<script src="./js/admin.js" defer></script>
+</body>
+</html>
