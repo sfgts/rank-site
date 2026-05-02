@@ -55,6 +55,24 @@ const els = {
   groupDot:           $("groupDot"),
   groupName:          $("groupName"),
   playerAchievements: $("playerAchievements"),
+
+  weekBanner:  $("weekBanner"),
+  weekAvatar:  $("weekAvatar"),
+  weekNick:    $("weekNick"),
+  weekDelta:   $("weekDelta"),
+  weekRating:  $("weekRating"),
+
+  miniCard:    $("miniCard"),
+  miniAvatar:  $("miniAvatar"),
+  miniNick:    $("miniNick"),
+  miniRating:  $("miniRating"),
+  miniDot:     $("miniDot"),
+  miniGroup:   $("miniGroup"),
+  miniDelta:   $("miniDelta"),
+
+  compareModal:    $("compareModal"),
+  compareGrid:     $("compareGrid"),
+  compareClose:    $("compareClose"),
 };
 
 /* ================== STATE ================== */
@@ -70,6 +88,7 @@ const state = {
   chartSeries: [],
   chartDims: null,
   chartHoverIdx: null,
+  compareNick: null,
 };
 
 /* ================== INIT ================== */
@@ -104,6 +123,10 @@ async function init() {
   }, 150));
 
   setupChartHover();
+
+  els.compareClose?.addEventListener("click", closeCompareModal);
+  els.compareModal?.querySelector(".compare-backdrop")?.addEventListener("click", closeCompareModal);
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeCompareModal(); });
 
   updateDeltaLabels();
   await loadData();
@@ -197,12 +220,39 @@ function buildGlobalRanking() {
       rating: p.series.at(-1)?.rating ?? null,
       deltaPeriod: calcDelta(p.series, state.periodDays),
       delta1: calcDelta(p.series, 1),
+      delta7: calcDelta(p.series, 7),
     }))
     .sort((a, b) => (b.rating ?? -Infinity) - (a.rating ?? -Infinity));
 
   state.globalRankByNick = new Map(
     state.globalRows.map((p, idx) => [p.nick, idx + 1])
   );
+
+  renderWeekBanner();
+}
+
+/* ================== PLAYER OF THE WEEK ================== */
+function renderWeekBanner() {
+  if (!els.weekBanner) return;
+  const candidates = state.globalRows.filter((p) => p.delta7 != null && p.delta7 > 0);
+  if (!candidates.length) { els.weekBanner.style.display = "none"; return; }
+
+  const best = candidates.reduce((a, b) => (b.delta7 > a.delta7 ? b : a));
+  const supUrl = `${SUPABASE.URL}/storage/v1/object/public/${SUPABASE.BUCKET}/${encodeURIComponent(best.nick)}.png`;
+  const uiUrl  = `https://ui-avatars.com/api/?name=${encodeURIComponent(best.nick)}&background=0b1f17&color=35c07a&size=64&bold=true&format=png`;
+
+  els.weekAvatar.src = supUrl;
+  els.weekAvatar.onerror = () => { els.weekAvatar.onerror = null; els.weekAvatar.src = uiUrl; };
+  els.weekNick.textContent = best.nick;
+  els.weekDelta.textContent = `+${fmt(best.delta7, CONFIG.DELTA_DIGITS)} pts this week`;
+  els.weekRating.textContent = `Rating: ${fmt(best.rating, CONFIG.RATING_DIGITS)}`;
+
+  els.weekBanner.style.display = "";
+  els.weekBanner.style.cursor = "pointer";
+  els.weekBanner.onclick = () => {
+    const p = state.players.find((x) => x.nick === best.nick);
+    if (p) selectPlayer(p);
+  };
 }
 
 /* ================== TABLE ================== */
@@ -232,14 +282,22 @@ function renderTable() {
 
       if (state.selected?.nick === p.nick) tr.classList.add("active");
 
+      const isCmpSelected = state.compareNick === p.nick;
       tr.innerHTML = `
         <td>${rank ?? "—"}</td>
-        <td>${escapeHtml(p.nick)}</td>
+        <td>${escapeHtml(p.nick)}<button class="cmp-btn${isCmpSelected ? " selected" : ""}" title="Compare with another player" data-nick="${escapeHtml(p.nick)}">vs</button></td>
         <td class="right">${fmt(p.rating, CONFIG.RATING_DIGITS)}</td>
         <td class="right ${deltaClass(p.deltaPeriod)}">${formatDelta(p.deltaPeriod, CONFIG.DELTA_DIGITS)}</td>
         <td class="right ${deltaClass(p.delta1)}">${formatDelta(p.delta1, CONFIG.DELTA_DIGITS)}</td>
       `;
+      tr.querySelector(".cmp-btn").addEventListener("click", (e) => {
+        e.stopPropagation();
+        onCompareClick(p.nick);
+      });
       tr.addEventListener("click", () => selectPlayer(p));
+      tr.addEventListener("mouseenter", (e) => showMiniCard(p, e));
+      tr.addEventListener("mousemove",  (e) => moveMiniCard(e));
+      tr.addEventListener("mouseleave", hideMiniCard);
       frag.appendChild(tr);
     }
   }
@@ -305,6 +363,117 @@ function setPlayerGroup(rating) {
     els.groupDot.style.background = g.color;
     els.groupDot.style.boxShadow = `0 0 12px ${g.color}55`;
   }
+}
+
+/* ================== MINI CARD ================== */
+function showMiniCard(p, e) {
+  if (!els.miniCard) return;
+  const g = getGroupByRating(p.rating);
+  const supUrl = `${SUPABASE.URL}/storage/v1/object/public/${SUPABASE.BUCKET}/${encodeURIComponent(p.nick)}.png`;
+  const uiUrl  = `https://ui-avatars.com/api/?name=${encodeURIComponent(p.nick)}&background=0b1f17&color=35c07a&size=64&bold=true&format=png`;
+
+  els.miniAvatar.src = supUrl;
+  els.miniAvatar.onerror = () => { els.miniAvatar.onerror = null; els.miniAvatar.src = uiUrl; };
+  els.miniNick.textContent    = p.nick;
+  els.miniRating.textContent  = fmt(p.rating, CONFIG.RATING_DIGITS);
+  els.miniDot.style.background   = g.color;
+  els.miniDot.style.boxShadow    = `0 0 6px ${g.color}88`;
+  els.miniGroup.textContent   = g.name;
+  els.miniDelta.textContent   = `Δ 7d: ${formatDelta(p.delta7 ?? p.deltaPeriod, CONFIG.DELTA_DIGITS)}`;
+
+  els.miniCard.style.display = "block";
+  moveMiniCard(e);
+}
+
+function moveMiniCard(e) {
+  if (!els.miniCard || els.miniCard.style.display === "none") return;
+  const cw = els.miniCard.offsetWidth  || 200;
+  const ch = els.miniCard.offsetHeight || 140;
+  let x = e.clientX + 16;
+  let y = e.clientY + 16;
+  if (x + cw > window.innerWidth  - 8) x = e.clientX - cw - 16;
+  if (y + ch > window.innerHeight - 8) y = e.clientY - ch - 16;
+  els.miniCard.style.left = x + "px";
+  els.miniCard.style.top  = y + "px";
+}
+
+function hideMiniCard() {
+  if (els.miniCard) els.miniCard.style.display = "none";
+}
+
+/* ================== COMPARE ================== */
+function onCompareClick(nick) {
+  if (state.compareNick === nick) {
+    state.compareNick = null;
+    renderTable();
+    return;
+  }
+  if (state.compareNick && state.compareNick !== nick) {
+    const n1 = state.compareNick;
+    state.compareNick = null;
+    renderTable();
+    openCompareModal(n1, nick);
+    return;
+  }
+  state.compareNick = nick;
+  renderTable();
+}
+
+function openCompareModal(nick1, nick2) {
+  if (!els.compareModal || !els.compareGrid) return;
+
+  const p1 = state.globalRows.find((p) => p.nick === nick1);
+  const p2 = state.globalRows.find((p) => p.nick === nick2);
+  if (!p1 || !p2) return;
+
+  const higherRating = (p1.rating ?? 0) >= (p2.rating ?? 0) ? nick1 : nick2;
+  const higherDelta  = (p1.delta7 ?? 0) >= (p2.delta7 ?? 0) ? nick1 : nick2;
+
+  els.compareGrid.innerHTML = [p1, p2].map((p) => {
+    const g = getGroupByRating(p.rating);
+    const supUrl = `${SUPABASE.URL}/storage/v1/object/public/${SUPABASE.BUCKET}/${encodeURIComponent(p.nick)}.png`;
+    const uiUrl  = `https://ui-avatars.com/api/?name=${encodeURIComponent(p.nick)}&background=0b1f17&color=35c07a&size=64&bold=true&format=png`;
+    const isRatingWinner = p.nick === higherRating;
+    const rank = state.globalRankByNick.get(p.nick) ?? "—";
+
+    return `
+      <div class="compare-col${isRatingWinner ? " winner" : ""}">
+        ${isRatingWinner ? '<div class="compare-winner-badge">Higher rating</div>' : '<div style="height:22px"></div>'}
+        <img class="compare-col-avatar" src="${escapeHtml(supUrl)}"
+             onerror="this.onerror=null;this.src='${escapeHtml(uiUrl)}'" alt="" />
+        <div class="compare-col-nick">${escapeHtml(p.nick)}</div>
+        <div class="compare-stat">
+          <div class="compare-stat-label">Rating</div>
+          <div class="compare-stat-val" style="color:var(--accent)">${fmt(p.rating, CONFIG.RATING_DIGITS)}</div>
+        </div>
+        <div class="compare-stat">
+          <div class="compare-stat-label">Rank</div>
+          <div class="compare-stat-val">#${rank}</div>
+        </div>
+        <div class="compare-stat">
+          <div class="compare-stat-label">Δ 7 days</div>
+          <div class="compare-stat-val ${deltaClass(p.delta7)}">${formatDelta(p.delta7, CONFIG.DELTA_DIGITS)}</div>
+        </div>
+        <div class="compare-stat">
+          <div class="compare-stat-label">Δ 1 day</div>
+          <div class="compare-stat-val ${deltaClass(p.delta1)}">${formatDelta(p.delta1, CONFIG.DELTA_DIGITS)}</div>
+        </div>
+        <div class="compare-stat">
+          <div class="compare-stat-label">Group</div>
+          <div class="compare-stat-val" style="font-size:14px;color:${g.color}">${escapeHtml(g.name)}</div>
+        </div>
+        <div class="compare-stat">
+          <div class="compare-stat-label">Data points</div>
+          <div class="compare-stat-val">${p.series.length}</div>
+        </div>
+      </div>`;
+  }).join("");
+
+  els.compareModal.style.display = "flex";
+}
+
+function closeCompareModal() {
+  if (els.compareModal) els.compareModal.style.display = "none";
 }
 
 /* ================== ACHIEVEMENTS ================== */

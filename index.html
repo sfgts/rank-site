@@ -33,6 +33,45 @@
   </div>
 </header>
 
+<!-- Player of the Week banner -->
+<div id="weekBanner" class="week-banner" style="display:none;">
+  <div class="container week-inner">
+    <div class="week-label">Player of the Week</div>
+    <div class="week-player">
+      <img id="weekAvatar" class="week-avatar" src="" alt="" />
+      <div class="week-info">
+        <div id="weekNick" class="week-nick"></div>
+        <div id="weekDelta" class="week-delta"></div>
+      </div>
+    </div>
+    <div id="weekRating" class="week-rating"></div>
+  </div>
+</div>
+
+<!-- Mini hover card -->
+<div id="miniCard" class="mini-card" style="display:none;">
+  <img id="miniAvatar" class="mini-avatar" src="" alt="" />
+  <div class="mini-body">
+    <div id="miniNick" class="mini-nick"></div>
+    <div id="miniRating" class="mini-rating"></div>
+    <div class="mini-row">
+      <span id="miniDot" class="mini-dot"></span>
+      <span id="miniGroup" class="mini-group"></span>
+    </div>
+    <div id="miniDelta" class="mini-delta"></div>
+  </div>
+</div>
+
+<!-- Comparison modal -->
+<div id="compareModal" class="compare-modal" style="display:none;">
+  <div class="compare-backdrop"></div>
+  <div class="compare-box">
+    <button id="compareClose" class="compare-close" type="button">✕</button>
+    <h2 class="compare-title">Player Comparison</h2>
+    <div class="compare-grid" id="compareGrid"></div>
+  </div>
+</div>
+
 <main class="container grid">
   <!-- Leaderboard -->
   <section class="card">
