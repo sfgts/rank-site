@@ -362,14 +362,14 @@ tbody tr.active {
   height: 36px;
   border-radius: 50%;
   object-fit: cover;
-  border: 2px solid rgba(218, 184, 35, 0.5);
+  border: 2px solid rgba(53, 210, 110, 0.5);
   background: rgba(0,0,0,0.3);
   transition: transform var(--t) var(--ease), border-color var(--t) var(--ease), box-shadow var(--t) var(--ease);
 }
 .ach-badge:hover img {
   transform: scale(1.12);
-  border-color: rgba(218, 184, 35, 0.9);
-  box-shadow: 0 0 12px rgba(218, 184, 35, 0.4);
+  border-color: rgba(53, 210, 110, 0.9);
+  box-shadow: 0 0 12px rgba(53, 210, 110, 0.4);
 }
 .ach-badge-tip {
   position: absolute;
@@ -378,7 +378,7 @@ tbody tr.active {
   transform: translateX(-50%);
   white-space: nowrap;
   background: rgba(11, 15, 20, 0.95);
-  border: 1px solid rgba(218, 184, 35, 0.4);
+  border: 1px solid rgba(53, 210, 110, 0.4);
   color: #e9edf5;
   font-size: 11px;
   font-weight: 600;
@@ -393,12 +393,12 @@ tbody tr.active {
 
 .ach-badge--link { text-decoration: none; cursor: pointer; }
 .ach-badge--link img {
-  border-color: rgba(218, 184, 35, 0.7);
-  box-shadow: 0 0 8px rgba(218, 184, 35, 0.25);
+  border-color: rgba(53, 210, 110, 0.7);
+  box-shadow: 0 0 8px rgba(53, 210, 110, 0.25);
 }
 .ach-badge--link:hover img {
-  border-color: rgba(218, 184, 35, 1);
-  box-shadow: 0 0 16px rgba(218, 184, 35, 0.5);
+  border-color: rgba(53, 210, 110, 1);
+  box-shadow: 0 0 16px rgba(53, 210, 110, 0.5);
 }
 
 /* ========== Footer ========== */
@@ -411,16 +411,82 @@ footer {
 }
 
 /* ========== Scrollbar ========== */
+/* Firefox */
+#history,
+.tableWrap {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(53, 192, 122, 0.5) rgba(255, 255, 255, 0.03);
+}
+
+/* Chrome / Edge / Safari */
 #history::-webkit-scrollbar,
-.tableWrap::-webkit-scrollbar { width: 8px; height: 8px; }
+.tableWrap::-webkit-scrollbar { width: 5px; height: 5px; }
+
+#history::-webkit-scrollbar-track,
+.tableWrap::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 99px;
+}
+
 #history::-webkit-scrollbar-thumb,
 .tableWrap::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.12);
-  border-radius: 8px;
+  background: rgba(53, 192, 122, 0.35);
+  border-radius: 99px;
+  transition: background 180ms ease;
 }
+
 #history::-webkit-scrollbar-thumb:hover,
 .tableWrap::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(53, 192, 122, 0.7);
+}
+
+/* ========== Loading Overlay ========== */
+.loading-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+  background: var(--bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 400ms ease, visibility 400ms ease;
+}
+.loading-overlay.hidden {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+.loading-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+.loading-spinner {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: 3px solid rgba(53, 192, 122, 0.15);
+  border-top-color: var(--accent);
+  animation: spin 800ms linear infinite;
+}
+.loading-text {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--fg);
+}
+.loading-sub {
+  font-size: 13px;
+  opacity: 0.45;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+@keyframes pulse {
+  0%, 100% { opacity: 0.45; }
+  50%       { opacity: 0.9; }
 }
 
 /* ========== Animations ========== */

@@ -114,7 +114,6 @@ async function init() {
 async function loadData() {
   setLoading(true);
   try {
-    // Load JSONP and Supabase hidden list in parallel — neither blocks the other
     const [dataResult, hiddenResult] = await Promise.allSettled([
       loadJSONP(CONFIG.DATA_URL),
       fetch(
@@ -151,6 +150,8 @@ async function loadData() {
 }
 
 function setLoading(isLoading) {
+  const overlay = document.getElementById("loadingOverlay");
+  if (overlay) overlay.classList.toggle("hidden", !isLoading);
   if (!els.refresh) return;
   els.refresh.disabled = isLoading;
   els.refresh.textContent = isLoading ? "Loading…" : "Refresh";
