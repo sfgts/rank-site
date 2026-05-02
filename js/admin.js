@@ -37,12 +37,25 @@ function calcDelta(series, days) {
   if (!series || series.length < 2) return null;
   var last = series[series.length - 1];
   var lastDate = new Date(last.date);
+
+  var monthStart = new Date(lastDate.getFullYear(), lastDate.getMonth(), 1);
+  var currentMonth = series.filter(function(p) { return new Date(p.date) >= monthStart; });
+  if (currentMonth.length < 2) return null;
+
   var target = new Date(lastDate);
   target.setDate(target.getDate() - days);
-  var base = series[0];
-  for (var i = 0; i < series.length; i++) {
-    if (new Date(series[i].date) <= target) base = series[i];
+  var effectiveFrom = target > monthStart ? target : monthStart;
+
+  // Default base = first point of month (the START value)
+  var base = currentMonth[0];
+
+  if (effectiveFrom > monthStart) {
+    for (var i = 0; i < currentMonth.length - 1; i++) {
+      if (new Date(currentMonth[i].date) <= effectiveFrom) base = currentMonth[i];
+    }
   }
+
+  if (base === last) return null;
   return last.rating - base.rating;
 }
 

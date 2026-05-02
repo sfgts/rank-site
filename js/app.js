@@ -181,7 +181,7 @@ async function loadData() {
   } catch (err) {
     console.error("Data load failed:", err);
     if (els.tbody) {
-      els.tbody.innerHTML = `<tr><td colspan="5" style="opacity:.7;padding:14px;">Failed to load data. Try Refresh.</td></tr>`;
+      els.tbody.innerHTML = `<tr><td colspan="3" style="opacity:.7;padding:14px;">Failed to load data. Try Refresh.</td></tr>`;
     }
   } finally {
     setLoading(false);
@@ -285,7 +285,7 @@ function renderTable() {
 
   if (!filtered.length) {
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td colspan="5" style="opacity:.7;padding:14px;">No players found.</td>`;
+    tr.innerHTML = `<td colspan="3" style="opacity:.7;padding:14px;">No players found.</td>`;
     frag.appendChild(tr);
   } else {
     for (const p of filtered) {
@@ -303,8 +303,6 @@ function renderTable() {
         <td>${rank ?? "—"}</td>
         <td>${escapeHtml(p.nick)}<button class="cmp-btn${isCmpSelected ? " selected" : ""}" title="Compare with another player" data-nick="${escapeHtml(p.nick)}">vs</button></td>
         <td class="right">${fmt(p.rating, CONFIG.RATING_DIGITS)}</td>
-        <td class="right ${deltaClass(p.deltaPeriod)}">${formatDelta(p.deltaPeriod, CONFIG.DELTA_DIGITS)}</td>
-        <td class="right ${deltaClass(p.delta1)}">${formatDelta(p.delta1, CONFIG.DELTA_DIGITS)}</td>
       `;
       tr.querySelector(".cmp-btn").addEventListener("click", (e) => {
         e.stopPropagation();
@@ -563,23 +561,48 @@ function renderHistory(series) {
   els.history.innerHTML = "";
   if (!series.length) return;
 
+  // Merge consecutive same-date pairs (start → end on the same day, e.g. 1st of month)
+  const merged = [];
+  let i = 0;
+  while (i < series.length) {
+    if (i + 1 < series.length && series[i].date === series[i + 1].date) {
+      merged.push({ date: series[i].date, startRating: series[i].rating, endRating: series[i + 1].rating });
+      i += 2;
+    } else {
+      merged.push({ date: series[i].date, rating: series[i].rating });
+      i++;
+    }
+  }
+
   const frag = document.createDocumentFragment();
-  const reversed = series.slice().reverse();
+  const reversed = merged.slice().reverse();
 
-  reversed.forEach((p, i) => {
-    const prev = reversed[i + 1]?.rating;
-    const delta = prev != null ? p.rating - prev : null;
-
+  reversed.forEach((p, idx) => {
+    const prevEntry = reversed[idx + 1];
+    const prevRating = prevEntry != null ? (prevEntry.endRating ?? prevEntry.rating) : null;
     const li = document.createElement("li");
-    const cls = delta == null ? "" : deltaClass(delta);
-    li.innerHTML = `
-      <span>${escapeHtml(p.date)}</span>
-      <span>${fmt(p.rating, CONFIG.RATING_DIGITS)}${
-        delta != null
-          ? ` <span class="${cls}">(${formatDelta(delta, CONFIG.DELTA_DIGITS)})</span>`
-          : ""
-      }</span>
-    `;
+
+    if (p.startRating != null) {
+      // Merged start → end entry (game played on 1st of month)
+      const delta = p.endRating - p.startRating;
+      const cls = deltaClass(delta);
+      li.innerHTML = `
+        <span>${escapeHtml(p.date)}</span>
+        <span>${fmt(p.startRating, CONFIG.RATING_DIGITS)}<span class="hist-arrow">→</span>${fmt(p.endRating, CONFIG.RATING_DIGITS)} <span class="${cls}">(${formatDelta(delta, CONFIG.DELTA_DIGITS)})</span></span>
+      `;
+    } else if (prevRating != null) {
+      const delta = p.rating - prevRating;
+      const cls = deltaClass(delta);
+      li.innerHTML = `
+        <span>${escapeHtml(p.date)}</span>
+        <span>${fmt(prevRating, CONFIG.RATING_DIGITS)}<span class="hist-arrow">→</span>${fmt(p.rating, CONFIG.RATING_DIGITS)} <span class="${cls}">(${formatDelta(delta, CONFIG.DELTA_DIGITS)})</span></span>
+      `;
+    } else {
+      li.innerHTML = `
+        <span>${escapeHtml(p.date)}</span>
+        <span>${fmt(p.rating, CONFIG.RATING_DIGITS)}</span>
+      `;
+    }
     frag.appendChild(li);
   });
 
@@ -653,31 +676,86 @@ function drawChartFrame(series, dims, opts = {}) {
     ? yAt(series[maxIndex].rating) + (yAt(series[maxIndex + 1].rating) - yAt(series[maxIndex].rating)) * partial
     : yAt(series[maxIndex].rating);
 
-  // Filled area under curve
-  ctx.beginPath();
-  ctx.moveTo(xAt(0), H - pad.b);
-  for (let i = 0; i <= maxIndex; i++) ctx.lineTo(xAt(i), yAt(series[i].rating));
-  ctx.lineTo(lastX, lastY);
-  ctx.lineTo(lastX, H - pad.b);
-  ctx.closePath();
+  // Build month segments (break chart at month boundaries)
   const grad = ctx.createLinearGradient(0, pad.t, 0, H - pad.b);
   grad.addColorStop(0, "rgba(53,192,122,0.32)");
   grad.addColorStop(1, "rgba(53,192,122,0.00)");
-  ctx.fillStyle = grad;
-  ctx.fill();
 
-  // Line
-  ctx.beginPath();
-  ctx.strokeStyle = "#35c07a";
+  const segs = [];
+  let segStart = 0;
+  for (let i = 1; i <= maxIndex; i++) {
+    const a = new Date(series[i - 1].date), b = new Date(series[i].date);
+    if (a.getMonth() !== b.getMonth() || a.getFullYear() !== b.getFullYear()) {
+      segs.push([segStart, i - 1]);
+      segStart = i;
+    }
+  }
+  segs.push([segStart, maxIndex]);
+
+  // Filled area — one fill per month segment
+  segs.forEach(([s, e], si) => {
+    const isLast = si === segs.length - 1;
+    const ex = (isLast && maxIndex < n - 1 && partial > 0) ? lastX : xAt(e);
+    const ey = (isLast && maxIndex < n - 1 && partial > 0) ? lastY : yAt(series[e].rating);
+    ctx.beginPath();
+    ctx.moveTo(xAt(s), H - pad.b);
+    for (let i = s; i <= e; i++) ctx.lineTo(xAt(i), yAt(series[i].rating));
+    if (isLast && maxIndex < n - 1 && partial > 0) ctx.lineTo(lastX, lastY);
+    ctx.lineTo(ex, H - pad.b);
+    ctx.closePath();
+    ctx.fillStyle = grad;
+    ctx.fill();
+  });
+
+  // Line — one stroke per month segment
   ctx.lineWidth = 2;
   ctx.lineJoin = "round";
   ctx.lineCap = "round";
-  for (let i = 0; i <= maxIndex; i++) {
-    const x = xAt(i), y = yAt(series[i].rating);
-    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-  }
-  if (maxIndex < n - 1 && partial > 0) ctx.lineTo(lastX, lastY);
-  ctx.stroke();
+  segs.forEach(([s, e], si) => {
+    const isLast = si === segs.length - 1;
+    ctx.beginPath();
+    ctx.strokeStyle = "#35c07a";
+    for (let i = s; i <= e; i++) {
+      const x = xAt(i), y = yAt(series[i].rating);
+      if (i === s) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    if (isLast && maxIndex < n - 1 && partial > 0) ctx.lineTo(lastX, lastY);
+    ctx.stroke();
+  });
+
+  // Month boundary markers — gray band from final rank downward + label
+  const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  segs.slice(0, -1).forEach(([, e]) => {
+    const x1 = xAt(e);
+    const x2 = xAt(e + 1);
+    const midX = (x1 + x2) / 2;
+    const halfW = Math.max((x2 - x1) / 2, 8);
+    const topY = yAt(series[e].rating); // top of band = Y level of last point of the month
+
+    // Gray filled band — starts at final rank of the month, goes to bottom
+    ctx.fillStyle = "rgba(180,180,200,0.13)";
+    ctx.fillRect(midX - halfW, topY, halfW * 2, H - pad.b - topY);
+
+    // Solid edges of the band
+    ctx.strokeStyle = "rgba(255,255,255,0.18)";
+    ctx.lineWidth = 1;
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    ctx.moveTo(midX - halfW, topY);
+    ctx.lineTo(midX - halfW, H - pad.b);
+    ctx.moveTo(midX + halfW, topY);
+    ctx.lineTo(midX + halfW, H - pad.b);
+    ctx.stroke();
+
+    // New month label — just above the top edge of the band
+    const nextDate = new Date(series[e + 1].date);
+    const label = MONTH_NAMES[nextDate.getMonth()] + " " + nextDate.getFullYear();
+    ctx.fillStyle = "rgba(255,255,255,0.50)";
+    ctx.font = "bold 10px ui-sans-serif, system-ui, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "bottom";
+    ctx.fillText(label, midX, topY - 4);
+  });
 
   // Data point dots (only after animation completes)
   if (progress >= 1) {
@@ -849,11 +927,27 @@ function calcDelta(series, days) {
   if (!series.length) return null;
   const last = series.at(-1);
   const lastDate = new Date(last.date);
+
+  // Never cross the month boundary — ratings reset each month
+  const monthStart = new Date(lastDate.getFullYear(), lastDate.getMonth(), 1);
+  const currentMonth = series.filter((p) => new Date(p.date) >= monthStart);
+  if (currentMonth.length < 2) return null;
+
   const target = new Date(lastDate);
   target.setDate(target.getDate() - days);
+  const effectiveFrom = target > monthStart ? target : monthStart;
 
-  let base = series[0];
-  for (const p of series) if (new Date(p.date) <= target) base = p;
+  // Default base = first point of month (the START value)
+  let base = currentMonth[0];
+
+  // If effectiveFrom is after month start, search for a more recent base
+  if (effectiveFrom > monthStart) {
+    for (let i = 0; i < currentMonth.length - 1; i++) {
+      if (new Date(currentMonth[i].date) <= effectiveFrom) base = currentMonth[i];
+    }
+  }
+
+  if (base === last) return null;
   return last.rating - base.rating;
 }
 
@@ -877,8 +971,7 @@ function deltaClass(v) {
 }
 
 function updateDeltaLabels() {
-  if (els.deltaHeader) els.deltaHeader.textContent = `Δ ${state.periodDays}d`;
-  if (els.deltaLabel)  els.deltaLabel.textContent  = `Change (${state.periodDays} days)`;
+  if (els.deltaLabel) els.deltaLabel.textContent = `Change (${state.periodDays} days)`;
 }
 
 function onSearch() {
