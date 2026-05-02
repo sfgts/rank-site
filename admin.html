@@ -70,6 +70,33 @@
     .trophy-btn:hover { background:rgba(218,184,35,0.12); border-color:rgba(218,184,35,0.5); }
     .trophy-btn.has-ach { border-color:rgba(218,184,35,0.6); background:rgba(218,184,35,0.1); }
 
+    /* ===== Dashboard ===== */
+    .dash-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(155px,1fr)); gap:12px; margin-bottom:24px; }
+    .dash-card { background:var(--card-bg); border:1px solid var(--card-border); border-radius:var(--radius-md); padding:16px 12px; text-align:center; }
+    .dash-card-val { font-size:30px; font-weight:700; font-variant-numeric:tabular-nums; color:var(--accent); line-height:1; }
+    .dash-card-label { font-size:11px; opacity:0.55; margin-top:6px; text-transform:uppercase; letter-spacing:0.04em; }
+    .dash-h3 { font-size:11px; font-weight:700; opacity:0.45; margin:22px 0 8px; text-transform:uppercase; letter-spacing:0.07em; }
+    .mover-row { display:flex; align-items:center; gap:10px; padding:8px 12px; border-radius:var(--radius-sm); background:var(--card-bg); border:1px solid var(--card-border); margin-bottom:6px; }
+    .mover-rank { font-size:11px; opacity:0.35; width:16px; text-align:center; flex-shrink:0; }
+    .mover-nick { flex:1; font-size:13px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
+    .mover-delta { font-size:13px; font-weight:700; font-variant-numeric:tabular-nums; flex-shrink:0; }
+    .group-bar-row { display:flex; align-items:center; gap:10px; font-size:13px; margin-bottom:7px; }
+    .group-bar-dot { width:12px; height:12px; border-radius:50%; flex-shrink:0; }
+    .group-bar-name { width:120px; font-weight:600; flex-shrink:0; }
+    .group-bar-track { flex:1; background:var(--soft-bg); border-radius:99px; height:7px; overflow:hidden; }
+    .group-bar-fill { height:100%; border-radius:99px; transition:width 700ms cubic-bezier(0.22,0.61,0.36,1); }
+    .group-bar-count { width:32px; text-align:right; opacity:0.5; font-size:12px; }
+
+    /* ===== Log ===== */
+    .log-wrap { background:var(--card-bg); border:1px solid var(--card-border); border-radius:var(--radius-md); overflow:hidden; }
+    .log-table { width:100%; border-collapse:collapse; font-size:13px; }
+    .log-table th { text-align:left; padding:9px 12px; border-bottom:1px solid var(--card-border); font-size:11px; opacity:0.45; text-transform:uppercase; letter-spacing:0.05em; font-weight:600; }
+    .log-table td { padding:9px 12px; border-bottom:1px solid var(--row-border); vertical-align:top; }
+    .log-table tbody tr:last-child td { border-bottom:none; }
+    .log-time { opacity:0.45; white-space:nowrap; font-variant-numeric:tabular-nums; font-size:12px; }
+    .log-action { font-weight:600; white-space:nowrap; }
+    .log-details { opacity:0.7; }
+
     /* ===== Achievement picker ===== */
     .ach-picker { position:fixed; z-index:200; background:var(--card-bg); border:1px solid var(--card-border); border-radius:var(--radius-md); padding:10px; min-width:230px; max-height:320px; overflow-y:auto; box-shadow:0 8px 32px rgba(0,0,0,0.55); }
     .ach-picker-item { display:flex; align-items:center; gap:8px; padding:7px 6px; cursor:pointer; border-radius:var(--radius-sm); font-size:13px; }
@@ -112,6 +139,15 @@
 </head>
 <body>
 
+<!-- LOADING OVERLAY -->
+<div id="adminLoadingOverlay" class="loading-overlay hidden">
+  <div class="loading-box">
+    <div class="loading-spinner"></div>
+    <div class="loading-text">ESB Admin</div>
+    <div class="loading-sub">Loading data…</div>
+  </div>
+</div>
+
 <!-- LOGIN -->
 <div id="loginSection" class="login-screen">
   <div class="login-card">
@@ -143,6 +179,8 @@
       <div class="admin-tabs">
         <button id="tabPlayers" class="admin-tab tab-active" type="button">👥 Players</button>
         <button id="tabAchievements" class="admin-tab" type="button">🏆 Achievements</button>
+        <button id="tabDashboard" class="admin-tab" type="button">📊 Dashboard</button>
+        <button id="tabLog" class="admin-tab" type="button">📋 Log</button>
       </div>
     </div>
   </header>
@@ -154,6 +192,7 @@
       <div class="stats-bar">
         <span class="stat-pill"><span>Visible:</span><span class="count" id="totalVisible">—</span></span>
         <span class="stat-pill hidden-pill"><span>Hidden:</span><span class="count" id="totalHidden">0</span></span>
+        <button id="exportCsvBtn" class="btn" type="button" style="font-size:13px;margin-left:auto;">📥 Export CSV</button>
       </div>
       <div class="admin-search">
         <input id="adminSearch" type="search" placeholder="Search by nickname..." autocomplete="off" />
@@ -197,6 +236,20 @@
       <div id="achCardList" class="ach-card-list">
         <p class="loading-msg">Loading…</p>
       </div>
+    </div>
+
+    <!-- DASHBOARD TAB -->
+    <div id="sectionDashboard" style="display:none;padding-bottom:32px;">
+      <p class="loading-msg">Loading dashboard…</p>
+    </div>
+
+    <!-- LOG TAB -->
+    <div id="sectionLog" style="display:none;padding-bottom:32px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+        <h2 style="margin:0;font-size:16px;font-weight:600;">Activity Log</h2>
+        <button id="clearLogBtn" class="btn" type="button" style="font-size:13px;color:#ff7676;">🗑 Clear log</button>
+      </div>
+      <div id="logList"><p class="loading-msg">Loading…</p></div>
     </div>
 
   </main>

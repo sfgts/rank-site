@@ -128,9 +128,25 @@ async function init() {
   els.compareModal?.querySelector(".compare-backdrop")?.addEventListener("click", closeCompareModal);
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeCompareModal(); });
 
+  initBackToTop();
+
   updateDeltaLabels();
   await loadData();
   handleDeepLink();
+}
+
+/* ================== BACK TO TOP ================== */
+function initBackToTop() {
+  const btn = document.getElementById("backToTop");
+  if (!btn) return;
+
+  window.addEventListener("scroll", debounce(() => {
+    btn.classList.toggle("visible", window.scrollY > 320);
+  }, 80), { passive: true });
+
+  btn.addEventListener("click", () => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  });
 }
 
 /* ================== LOAD ================== */
@@ -333,6 +349,14 @@ function selectPlayer(p) {
   setPlayerGroup(lastRating);
   loadAndRenderAchievements(p.nick);
 
+  // Mobile: auto-scroll to profile section
+  if (window.innerWidth <= 768) {
+    const profileCard = document.querySelector(".grid .card:nth-child(2)");
+    if (profileCard) {
+      setTimeout(() => profileCard.scrollIntoView({ behavior: "smooth", block: "start" }), 80);
+    }
+  }
+
   const seriesWindow = sliceByDays(p.series, state.periodDays);
   renderHistory(seriesWindow);
   drawChartAnimated(seriesWindow);
@@ -368,6 +392,8 @@ function setPlayerGroup(rating) {
 /* ================== MINI CARD ================== */
 function showMiniCard(p, e) {
   if (!els.miniCard) return;
+  // Don't show mini card on touch devices
+  if ("ontouchstart" in window) return;
   const g = getGroupByRating(p.rating);
   const supUrl = `${SUPABASE.URL}/storage/v1/object/public/${SUPABASE.BUCKET}/${encodeURIComponent(p.nick)}.png`;
   const uiUrl  = `https://ui-avatars.com/api/?name=${encodeURIComponent(p.nick)}&background=0b1f17&color=35c07a&size=64&bold=true&format=png`;

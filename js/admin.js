@@ -16,6 +16,36 @@ const ADMIN_CFG = Object.freeze({
   COOKIE: "esb_admin",
 });
 
+/* ===== Rating groups ===== */
+var GROUPS = [
+  { name: "Legend",       min: 1250, color: "#e53a2e" },
+  { name: "Icon",         min: 1125, color: "#dab823" },
+  { name: "Elite",        min: 1000, color: "#f0ff25" },
+  { name: "Champion",     min:  875, color: "#20b839" },
+  { name: "World Class",  min:  750, color: "#b8b8b8" },
+  { name: "Professional", min:    0, color: "#7ec8ce" },
+];
+function getGroup(rating) {
+  var r = Number(rating);
+  if (!isFinite(r) || r < 0) return GROUPS[GROUPS.length - 1];
+  for (var i = 0; i < GROUPS.length; i++) {
+    if (r >= GROUPS[i].min) return GROUPS[i];
+  }
+  return GROUPS[GROUPS.length - 1];
+}
+function calcDelta(series, days) {
+  if (!series || series.length < 2) return null;
+  var last = series[series.length - 1];
+  var lastDate = new Date(last.date);
+  var target = new Date(lastDate);
+  target.setDate(target.getDate() - days);
+  var base = series[0];
+  for (var i = 0; i < series.length; i++) {
+    if (new Date(series[i].date) <= target) base = series[i];
+  }
+  return last.rating - base.rating;
+}
+
 /* ===== State ===== */
 const st = {
   players: [],
@@ -25,6 +55,7 @@ const st = {
   playerAchievements: {},
   openPickerNick: null,
   currentTab: "players",
+  adminEmail: "",
 };
 
 /* ===== DOM refs ===== */
@@ -84,6 +115,9 @@ async function tryLogin() {
       return;
     }
     setCookie(ADMIN_CFG.COOKIE, "1", 7);
+    setCookie("esb_admin_email", email, 7);
+    st.adminEmail = email;
+    writeLog("Logged in", email);
     enterPanel();
   } catch (e) {
     console.error("Login error:", e);
@@ -101,14 +135,23 @@ function showLoginError(msg) {
   passwordInput.focus();
 }
 function logout() {
+  writeLog("Logged out", st.adminEmail || null);
   deleteCookie(ADMIN_CFG.COOKIE);
-  location.reload();
+  deleteCookie("esb_admin_email");
+  st.adminEmail = "";
+  setTimeout(function() { location.reload(); }, 300);
 }
 
 /* ===== Panel ===== */
+function setAdminLoading(on) {
+  var ov = document.getElementById("adminLoadingOverlay");
+  if (ov) ov.classList.toggle("hidden", !on);
+}
+
 function enterPanel() {
   loginSection.style.display = "none";
   panelSection.style.display = "block";
+  setTimeout(function() { setAdminLoading(true); }, 0);
   loadAdminData();
 }
 
@@ -135,9 +178,11 @@ async function loadAdminData() {
     var data = await loadJSONP(ADMIN_CFG.DATA_URL);
     st.players = (data && data.players ? data.players : [])
       .map(function(p) {
+        var series = (p.series || []).slice().sort(function(a,b){return a.date.localeCompare(b.date);});
         return {
           nick: String(p.nick),
-          rating: p.series && p.series.length ? p.series[p.series.length - 1].rating : null,
+          rating: series.length ? series[series.length - 1].rating : null,
+          series: series,
         };
       })
       .sort(function(a, b) {
@@ -148,28 +193,23 @@ async function loadAdminData() {
     renderList();
   } catch (err) {
     playerList.innerHTML = '<p style="color:#ff7676;padding:24px 0;text-align:center;">Failed to load data: ' + escHtml(err.message) + '</p>';
+  } finally {
+    setAdminLoading(false);
   }
 }
 
 /* ===== Tab switching ===== */
 function switchTab(tab) {
   st.currentTab = tab;
-  var tabPlayers = document.getElementById("tabPlayers");
-  var tabAch     = document.getElementById("tabAchievements");
-  var secPlayers = document.getElementById("sectionPlayers");
-  var secAch     = document.getElementById("sectionAchievements");
-
-  if (tab === "players") {
-    tabPlayers.classList.add("tab-active");
-    tabAch.classList.remove("tab-active");
-    secPlayers.style.display = "block";
-    secAch.style.display = "none";
-  } else {
-    tabAch.classList.add("tab-active");
-    tabPlayers.classList.remove("tab-active");
-    secPlayers.style.display = "none";
-    secAch.style.display = "block";
-  }
+  var tabIds = ["players", "achievements", "dashboard", "log"];
+  tabIds.forEach(function(key) {
+    var btn = document.getElementById("tab" + key.charAt(0).toUpperCase() + key.slice(1));
+    var sec = document.getElementById("section" + key.charAt(0).toUpperCase() + key.slice(1));
+    if (btn) btn.classList.toggle("tab-active", key === tab);
+    if (sec) sec.style.display = key === tab ? "block" : "none";
+  });
+  if (tab === "dashboard") renderDashboard();
+  if (tab === "log") loadLog();
 }
 
 /* ===== Load achievements ===== */
@@ -338,6 +378,7 @@ async function createAchievement(name, url, file) {
     var inserted = await insertRes.json();
     var newAch = Array.isArray(inserted) ? inserted[0] : inserted;
     st.achievements.push(newAch);
+    writeLog("Achievement created", name);
 
     /* Reset form */
     document.getElementById("achNameInput").value = "";
@@ -409,6 +450,7 @@ async function saveAchievementEdit(id, name, url, file, cardEl) {
       st.achievements[idx].url = url || null;
       if (updateData.icon_url) st.achievements[idx].icon_url = updateData.icon_url;
     }
+    writeLog("Achievement edited", name);
 
     renderAchievementsTab();
     renderList();
@@ -427,6 +469,8 @@ async function deleteAchievement(id, cardEl) {
       { method: "DELETE", headers: { apikey: SUPABASE.KEY, Authorization: "Bearer " + SUPABASE.KEY } }
     );
     if (!res.ok) throw new Error("HTTP " + res.status);
+    var delName = (st.achievements.find(function(a){return a.id===id;})||{}).name || String(id);
+    writeLog("Achievement deleted", delName);
     st.achievements = st.achievements.filter(function(a) { return a.id !== id; });
     Object.keys(st.playerAchievements).forEach(function(nick) {
       st.playerAchievements[nick].delete(id);
@@ -508,6 +552,8 @@ async function togglePlayerAchievement(nick, achId, assign) {
       );
     }
     if (!res.ok) { var errBody = await res.text(); throw new Error("HTTP " + res.status + ": " + errBody); }
+    var achName = (st.achievements.find(function(a){return a.id===achId;})||{}).name || String(achId);
+    writeLog(assign ? "Badge assigned" : "Badge removed", nick + " → " + achName);
   } catch (err) {
     console.error("Toggle achievement failed:", err);
     if (assign) { st.playerAchievements[nick].delete(achId); }
@@ -620,6 +666,7 @@ async function uploadAvatar(nick, file, imgEl) {
     if (!res.ok) { var errText = await res.text(); throw new Error("Upload failed: " + errText); }
     imgEl.src = supabaseAvatarUrl(nick);
     imgEl.onerror = null;
+    writeLog("Avatar uploaded", nick);
   } catch (err) {
     console.error(err); alert("Upload error: " + err.message);
   } finally {
@@ -654,6 +701,7 @@ async function onToggle(nick, visible, row) {
       });
     }
     if (!res2.ok) { var errBody = await res2.text(); throw new Error("HTTP " + res2.status + ": " + errBody); }
+    writeLog(visible ? "Player shown" : "Player hidden", nick);
   } catch (err) {
     console.error("Supabase error:", err);
     if (visible) { st.hiddenNicks.add(nick); } else { st.hiddenNicks.delete(nick); }
@@ -704,6 +752,172 @@ function debounce(fn, ms) {
   return function() { var args = arguments; clearTimeout(t); t = setTimeout(function() { fn.apply(null, args); }, ms); };
 }
 
+/* ===== Write log ===== */
+async function writeLog(action, details) {
+  try {
+    await fetch(SUPABASE.URL + "/rest/v1/admin_log", {
+      method: "POST",
+      headers: {
+        apikey: SUPABASE.KEY, Authorization: "Bearer " + SUPABASE.KEY,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        action: action,
+        details: details || null,
+        email: st.adminEmail || null,
+      }),
+    });
+  } catch (e) { console.warn("Log write failed:", e); }
+}
+
+/* ===== Load log ===== */
+async function loadLog() {
+  var logList = document.getElementById("logList");
+  if (!logList) return;
+  logList.innerHTML = '<p class="loading-msg">Loading…</p>';
+  try {
+    var res = await fetch(
+      SUPABASE.URL + "/rest/v1/admin_log?select=*&order=created_at.desc&limit=200",
+      { headers: { apikey: SUPABASE.KEY, Authorization: "Bearer " + SUPABASE.KEY } }
+    );
+    var rows = await res.json();
+    if (!Array.isArray(rows) || !rows.length) {
+      logList.innerHTML = '<p class="loading-msg">No log entries yet.</p>';
+      return;
+    }
+    var html = '<div class="log-wrap"><table class="log-table"><thead><tr><th>Time</th><th>Who</th><th>Action</th><th>Details</th></tr></thead><tbody>';
+    rows.forEach(function(r) {
+      var d = new Date(r.created_at);
+      var timeStr = d.toLocaleDateString("uk-UA") + " " + d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      html += '<tr>' +
+        '<td class="log-time">' + escHtml(timeStr) + '</td>' +
+        '<td class="log-details" style="color:var(--accent);font-size:12px;">' + escHtml(r.email || "—") + '</td>' +
+        '<td class="log-action">' + escHtml(r.action) + '</td>' +
+        '<td class="log-details">' + escHtml(r.details || "—") + '</td>' +
+        '</tr>';
+    });
+    html += '</tbody></table></div>';
+    logList.innerHTML = html;
+  } catch (e) {
+    logList.innerHTML = '<p style="color:#ff7676;padding:16px 0;text-align:center;">Failed to load log: ' + escHtml(e.message) + '</p>';
+  }
+}
+
+/* ===== Clear log ===== */
+async function clearLog() {
+  if (!confirm("Clear entire activity log? This cannot be undone.")) return;
+  try {
+    var res = await fetch(
+      SUPABASE.URL + "/rest/v1/admin_log?id=gte.0",
+      { method: "DELETE", headers: { apikey: SUPABASE.KEY, Authorization: "Bearer " + SUPABASE.KEY } }
+    );
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    document.getElementById("logList").innerHTML = '<p class="loading-msg">Log cleared.</p>';
+  } catch (e) { alert("Failed to clear log: " + e.message); }
+}
+
+/* ===== Export CSV ===== */
+function exportCSV() {
+  var rows = [["Rank", "Nickname", "Rating", "Δ7d", "Δ1d", "Group", "Status"]];
+  var visible = st.players.filter(function(p) { return !st.hiddenNicks.has(p.nick); });
+  visible.forEach(function(p, i) {
+    var d7 = calcDelta(p.series, 7);
+    var d1 = calcDelta(p.series, 1);
+    var grp = p.rating != null ? getGroup(p.rating).name : "—";
+    rows.push([
+      i + 1, p.nick,
+      p.rating != null ? Number(p.rating).toFixed(1) : "—",
+      d7 != null ? (d7 > 0 ? "+" : "") + d7.toFixed(1) : "—",
+      d1 != null ? (d1 > 0 ? "+" : "") + d1.toFixed(1) : "—",
+      grp, "Visible",
+    ]);
+  });
+  var csv = rows.map(function(r) {
+    return r.map(function(c) {
+      var s = String(c);
+      return (s.includes(",") || s.includes('"') || s.includes("\n")) ? '"' + s.replace(/"/g, '""') + '"' : s;
+    }).join(",");
+  }).join("\n");
+  var blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement("a");
+  a.href = url;
+  a.download = "esb_leaderboard_" + new Date().toISOString().slice(0, 10) + ".csv";
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a); URL.revokeObjectURL(url);
+}
+
+/* ===== Dashboard ===== */
+function renderDashboard() {
+  var sec = document.getElementById("sectionDashboard");
+  if (!sec) return;
+
+  var total   = st.players.length;
+  var hidden  = st.hiddenNicks.size;
+  var visible = total - hidden;
+  var achCount = st.achievements.length;
+  var totalBadges = Object.values(st.playerAchievements).reduce(function(s, set) { return s + set.size; }, 0);
+
+  var ratings = st.players
+    .filter(function(p) { return !st.hiddenNicks.has(p.nick) && p.rating != null; })
+    .map(function(p) { return p.rating; });
+  var avgRating = ratings.length ? (ratings.reduce(function(s, r) { return s + r; }, 0) / ratings.length).toFixed(1) : "—";
+  var maxRating = ratings.length ? Math.max.apply(null, ratings).toFixed(1) : "—";
+
+  var withDelta = st.players
+    .filter(function(p) { return p.series && p.series.length > 1; })
+    .map(function(p) { return { nick: p.nick, delta7: calcDelta(p.series, 7) }; });
+
+  var gainers = withDelta.filter(function(p) { return p.delta7 != null && p.delta7 > 0; })
+    .sort(function(a, b) { return b.delta7 - a.delta7; }).slice(0, 5);
+  var losers  = withDelta.filter(function(p) { return p.delta7 != null && p.delta7 < 0; })
+    .sort(function(a, b) { return a.delta7 - b.delta7; }).slice(0, 5);
+
+  var groupDist = GROUPS.map(function(g) {
+    var cnt = st.players.filter(function(p) {
+      return !st.hiddenNicks.has(p.nick) && p.rating != null && getGroup(p.rating).name === g.name;
+    }).length;
+    return { name: g.name, color: g.color, count: cnt };
+  }).filter(function(g) { return g.count > 0; });
+
+  function moverHtml(list, isGain) {
+    if (!list.length) return '<p class="loading-msg" style="padding:6px 0;">No data</p>';
+    return list.map(function(p, i) {
+      var color = isGain ? "#52d18a" : "#ff7676";
+      var sign  = isGain ? "+" : "";
+      return '<div class="mover-row">' +
+        '<span class="mover-rank">' + (i + 1) + '</span>' +
+        '<span class="mover-nick">' + escHtml(p.nick) + '</span>' +
+        '<span class="mover-delta" style="color:' + color + '">' + sign + p.delta7.toFixed(1) + '</span>' +
+        '</div>';
+    }).join("");
+  }
+
+  sec.innerHTML =
+    '<div class="dash-grid">' +
+      '<div class="dash-card"><div class="dash-card-val">' + visible + '</div><div class="dash-card-label">Visible players</div></div>' +
+      '<div class="dash-card"><div class="dash-card-val" style="color:#ff7676">' + hidden + '</div><div class="dash-card-label">Hidden players</div></div>' +
+      '<div class="dash-card"><div class="dash-card-val">' + avgRating + '</div><div class="dash-card-label">Avg rating</div></div>' +
+      '<div class="dash-card"><div class="dash-card-val">' + maxRating + '</div><div class="dash-card-label">Top rating</div></div>' +
+      '<div class="dash-card"><div class="dash-card-val">' + achCount + '</div><div class="dash-card-label">Achievements</div></div>' +
+      '<div class="dash-card"><div class="dash-card-val">' + totalBadges + '</div><div class="dash-card-label">Badges assigned</div></div>' +
+    '</div>' +
+    '<p class="dash-h3">📈 Top gainers (7 days)</p>' + moverHtml(gainers, true) +
+    '<p class="dash-h3">📉 Top losers (7 days)</p>'  + moverHtml(losers, false) +
+    '<p class="dash-h3">🎮 Group distribution</p>' +
+    '<div>' +
+    groupDist.map(function(g) {
+      var pct = visible > 0 ? Math.round(g.count / visible * 100) : 0;
+      return '<div class="group-bar-row">' +
+        '<span class="group-bar-dot" style="background:' + g.color + '"></span>' +
+        '<span class="group-bar-name">' + escHtml(g.name) + '</span>' +
+        '<div class="group-bar-track"><div class="group-bar-fill" style="width:' + pct + '%;background:' + g.color + '"></div></div>' +
+        '<span class="group-bar-count">' + g.count + '</span>' +
+        '</div>';
+    }).join("") +
+    '</div>';
+}
+
 /* ===== Boot ===== */
 loginBtn.addEventListener("click", tryLogin);
 if (emailInput) emailInput.addEventListener("keydown", function(e) { if (e.key === "Enter") passwordInput.focus(); });
@@ -717,8 +931,20 @@ document.addEventListener("DOMContentLoaded", function() {
   /* Tab buttons */
   var tabPlayers = document.getElementById("tabPlayers");
   var tabAch     = document.getElementById("tabAchievements");
+  var tabDash    = document.getElementById("tabDashboard");
+  var tabLog     = document.getElementById("tabLog");
   if (tabPlayers) tabPlayers.addEventListener("click", function() { switchTab("players"); });
   if (tabAch)     tabAch.addEventListener("click",     function() { switchTab("achievements"); });
+  if (tabDash)    tabDash.addEventListener("click",    function() { switchTab("dashboard"); });
+  if (tabLog)     tabLog.addEventListener("click",     function() { switchTab("log"); });
+
+  /* Export CSV button */
+  var exportBtn = document.getElementById("exportCsvBtn");
+  if (exportBtn) exportBtn.addEventListener("click", exportCSV);
+
+  /* Clear log button */
+  var clearLogBtnEl = document.getElementById("clearLogBtn");
+  if (clearLogBtnEl) clearLogBtnEl.addEventListener("click", clearLog);
 
   /* New achievement form */
   var addAchBtn    = document.getElementById("addAchBtn");
@@ -750,4 +976,9 @@ document.addEventListener("DOMContentLoaded", function() {
   });
 });
 
-if (getCookie(ADMIN_CFG.COOKIE)) { enterPanel(); } else { if (emailInput) emailInput.focus(); }
+if (getCookie(ADMIN_CFG.COOKIE)) {
+  st.adminEmail = getCookie("esb_admin_email") || "";
+  enterPanel();
+} else {
+  if (emailInput) emailInput.focus();
+}
