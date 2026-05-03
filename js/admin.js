@@ -159,6 +159,7 @@ function logout() {
 function setAdminLoading(on) {
   var ov = document.getElementById("adminLoadingOverlay");
   if (ov) ov.classList.toggle("hidden", !on);
+  document.body.style.overflow = on ? "hidden" : "";
 }
 
 function enterPanel() {

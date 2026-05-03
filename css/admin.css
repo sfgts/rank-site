@@ -2,6 +2,9 @@
  * ESportsBattle Admin Panel — styles
  * ============================================================ */
 
+/* ===== Global mobile fix ===== */
+html, body { overflow-x: hidden; }
+
 /* ===== Login ===== */
 .login-screen { min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px; }
 .login-card { width:100%; max-width:360px; background:var(--card-bg); border:1px solid var(--card-border); border-radius:var(--radius-lg); padding:32px; box-shadow:var(--shadow-card); animation:fadeIn 320ms var(--ease) both; }
@@ -24,8 +27,15 @@
 .admin-title { margin:0; font-size:20px; }
 
 /* ===== Tabs ===== */
-.admin-tabs { display:flex; gap:4px; padding:0 0 0 2px; margin:16px 0 0; border-bottom:1px solid rgba(255,255,255,0.08); }
-.admin-tab { padding:9px 20px; border:none; background:none; color:inherit; font:inherit; font-size:14px; cursor:pointer; border-radius:var(--radius-sm) var(--radius-sm) 0 0; opacity:0.55; transition:background var(--t) var(--ease),opacity var(--t) var(--ease); }
+.admin-tabs {
+  display:flex; gap:4px; padding:0 0 0 2px; margin:16px 0 0;
+  border-bottom:1px solid rgba(255,255,255,0.08);
+  overflow-x:auto; overflow-y:hidden;
+  -webkit-overflow-scrolling:touch;
+  scrollbar-width:none;
+}
+.admin-tabs::-webkit-scrollbar { display:none; }
+.admin-tab { padding:9px 16px; border:none; background:none; color:inherit; font:inherit; font-size:14px; cursor:pointer; border-radius:var(--radius-sm) var(--radius-sm) 0 0; opacity:0.55; transition:background var(--t) var(--ease),opacity var(--t) var(--ease); white-space:nowrap; flex-shrink:0; }
 .admin-tab:hover { opacity:0.85; background:rgba(255,255,255,0.05); }
 .admin-tab.tab-active { opacity:1; font-weight:600; background:rgba(53,192,122,0.1); color:var(--accent); border-bottom:2px solid var(--accent); }
 

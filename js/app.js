@@ -54,11 +54,7 @@ const els = {
 
   profileTitle:  $("profileTitle"),
   currentRating: $("currentRating"),
-  deltaPeriod:   $("delta7"),
-  delta1:        $("delta1"),
   pointsCount:   $("pointsCount"),
-  deltaHeader:   $("deltaHeader"),
-  deltaLabel:    $("deltaLabel"),
 
   history:       $("history"),
   chart:         $("chart"),
@@ -83,7 +79,6 @@ const els = {
   miniRating:  $("miniRating"),
   miniDot:     $("miniDot"),
   miniGroup:   $("miniGroup"),
-  miniDelta:   $("miniDelta"),
 
   compareModal:    $("compareModal"),
   compareGrid:     $("compareGrid"),
@@ -118,7 +113,6 @@ async function init() {
       els.periodButtons.forEach((b) => b.classList.remove("active"));
       btn.classList.add("active");
       state.periodDays = Number(btn.dataset.days);
-      updateDeltaLabels();
       renderTable();
       if (state.selected) {
         const p = state.players.find((x) => x.nick === state.selected.nick);
@@ -145,93 +139,9 @@ async function init() {
 
   initBackToTop();
 
-  updateDeltaLabels();
   await loadGroups();
   await loadData();
   handleDeepLink();
-}
-
-/* ================== SPRING PETALS ================== */
-function initSnow() {
-  const canvas = document.getElementById("snowCanvas");
-  if (!canvas) return;
-  const ctx = canvas.getContext("2d");
-
-  const COUNT = 55;
-  let petals = [];
-  let W = 0, H = 0;
-
-  // Soft spring petal colors
-  const COLORS = [
-    [255, 192, 203], // pink
-    [255, 182, 193], // light pink
-    [255, 218, 224], // pale pink
-    [255, 228, 196], // peach
-    [255, 240, 245], // lavender blush
-  ];
-
-  function resize() {
-    W = canvas.width  = window.innerWidth;
-    H = canvas.height = window.innerHeight;
-  }
-
-  function mkPetal(randomY = false) {
-    const c = COLORS[Math.floor(Math.random() * COLORS.length)];
-    return {
-      x:       Math.random() * W,
-      y:       randomY ? Math.random() * H : -20,
-      rx:      Math.random() * 6 + 4,   // petal width
-      ry:      Math.random() * 4 + 2,   // petal height
-      angle:   Math.random() * Math.PI * 2,
-      spin:    (Math.random() - 0.5) * 0.04,
-      speed:   Math.random() * 1.0 + 0.4,
-      drift:   Math.random() * 0.8 - 0.4,
-      wobble:  Math.random() * Math.PI * 2,
-      wobbleSpeed: Math.random() * 0.025 + 0.008,
-      opacity: Math.random() * 0.5 + 0.35,
-      color:   c,
-    };
-  }
-
-  resize();
-  window.addEventListener("resize", resize, { passive: true });
-  for (let i = 0; i < COUNT; i++) petals.push(mkPetal(true));
-
-  function drawPetal(p) {
-    ctx.save();
-    ctx.translate(p.x, p.y);
-    ctx.rotate(p.angle);
-    ctx.beginPath();
-    ctx.ellipse(0, 0, p.rx, p.ry, 0, 0, Math.PI * 2);
-    ctx.fillStyle = `rgba(${p.color[0]},${p.color[1]},${p.color[2]},${p.opacity})`;
-    ctx.fill();
-    // Subtle inner highlight
-    ctx.beginPath();
-    ctx.ellipse(-p.rx * 0.15, -p.ry * 0.2, p.rx * 0.45, p.ry * 0.35, 0, 0, Math.PI * 2);
-    ctx.fillStyle = `rgba(255,255,255,${p.opacity * 0.35})`;
-    ctx.fill();
-    ctx.restore();
-  }
-
-  function tick() {
-    ctx.clearRect(0, 0, W, H);
-
-    for (const p of petals) {
-      p.wobble += p.wobbleSpeed;
-      p.angle  += p.spin;
-      p.x += p.drift + Math.sin(p.wobble) * 0.7;
-      p.y += p.speed;
-
-      if (p.y > H + 20) Object.assign(p, mkPetal());
-      if (p.x >  W + 20) p.x = -20;
-      if (p.x < -20)     p.x =  W + 20;
-
-      drawPetal(p);
-    }
-
-    requestAnimationFrame(tick);
-  }
-  tick();
 }
 
 /* ================== BACK TO TOP ================== */
@@ -290,6 +200,7 @@ async function loadData() {
 function setLoading(isLoading) {
   const overlay = document.getElementById("loadingOverlay");
   if (overlay) overlay.classList.toggle("hidden", !isLoading);
+  document.body.style.overflow = isLoading ? "hidden" : "";
   if (!els.refresh) return;
   els.refresh.disabled = isLoading;
   els.refresh.textContent = isLoading ? "Loading…" : "Refresh";
@@ -438,8 +349,6 @@ function selectPlayer(p) {
 
   const lastRating = p.series.at(-1)?.rating ?? null;
   if (els.currentRating) els.currentRating.textContent = fmt(lastRating, CONFIG.RATING_DIGITS);
-  if (els.deltaPeriod) els.deltaPeriod.textContent = formatDelta(calcDelta(p.series, state.periodDays), CONFIG.DELTA_DIGITS);
-  if (els.delta1)      els.delta1.textContent      = formatDelta(calcDelta(p.series, 1),               CONFIG.DELTA_DIGITS);
   if (els.pointsCount) els.pointsCount.textContent = String(p.series.length);
 
   setPlayerPhoto(p.nick);
@@ -502,7 +411,6 @@ function showMiniCard(p, e) {
   els.miniDot.style.background   = g.color;
   els.miniDot.style.boxShadow    = `0 0 6px ${g.color}88`;
   els.miniGroup.textContent   = g.name;
-  els.miniDelta.textContent   = `Δ 7d: ${formatDelta(p.delta7 ?? p.deltaPeriod, CONFIG.DELTA_DIGITS)}`;
 
   els.miniCard.style.display = "block";
   moveMiniCard(e);
@@ -1023,30 +931,23 @@ function sliceByDays(series, days) {
 }
 
 function calcDelta(series, days) {
-  if (!series.length) return null;
+  if (!series || series.length < 2) return null;
   const last = series.at(-1);
-  const lastDate = new Date(last.date);
-
-  // Never cross the month boundary — ratings reset each month
-  const monthStart = new Date(lastDate.getFullYear(), lastDate.getMonth(), 1);
-  const currentMonth = series.filter((p) => new Date(p.date) >= monthStart);
-  if (currentMonth.length < 2) return null;
+  const lastDate = new Date(last.date + "T00:00:00");
 
   const target = new Date(lastDate);
   target.setDate(target.getDate() - days);
-  const effectiveFrom = target > monthStart ? target : monthStart;
 
-  // Default base = first point of month (the START value)
-  let base = currentMonth[0];
-
-  // If effectiveFrom is after month start, search for a more recent base
-  if (effectiveFrom > monthStart) {
-    for (let i = 0; i < currentMonth.length - 1; i++) {
-      if (new Date(currentMonth[i].date) <= effectiveFrom) base = currentMonth[i];
+  // Find the last entry whose date is on or before the target date
+  let base = null;
+  for (let i = series.length - 2; i >= 0; i--) {
+    if (new Date(series[i].date + "T00:00:00") <= target) {
+      base = series[i];
+      break;
     }
   }
 
-  if (base === last) return null;
+  if (!base) return null;
   return last.rating - base.rating;
 }
 
@@ -1067,10 +968,6 @@ function deltaClass(v) {
   if (v > 0) return "delta-pos";
   if (v < 0) return "delta-neg";
   return "delta-zero";
-}
-
-function updateDeltaLabels() {
-  if (els.deltaLabel) els.deltaLabel.textContent = `Change (${state.periodDays} days)`;
 }
 
 function onSearch() {
