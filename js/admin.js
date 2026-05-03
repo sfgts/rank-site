@@ -214,7 +214,7 @@ async function loadAdminData() {
 /* ===== Tab switching ===== */
 function switchTab(tab) {
   st.currentTab = tab;
-  var tabIds = ["players", "achievements", "dashboard", "log"];
+  var tabIds = ["players", "achievements", "dashboard", "log", "groups"];
   tabIds.forEach(function(key) {
     var btn = document.getElementById("tab" + key.charAt(0).toUpperCase() + key.slice(1));
     var sec = document.getElementById("section" + key.charAt(0).toUpperCase() + key.slice(1));
@@ -223,6 +223,104 @@ function switchTab(tab) {
   });
   if (tab === "dashboard") renderDashboard();
   if (tab === "log") loadLog();
+  if (tab === "groups") loadGroups().then(renderGroupsTab);
+}
+
+/* ===== Load groups ===== */
+async function loadGroups() {
+  try {
+    var res = await fetch(
+      SUPABASE.URL + "/rest/v1/rating_groups?select=*&order=min_rating.desc",
+      { headers: { apikey: SUPABASE.KEY, Authorization: "Bearer " + SUPABASE.KEY } }
+    );
+    var rows = await res.json();
+    if (Array.isArray(rows) && rows.length) {
+      GROUPS = rows.map(function(r) {
+        return { id: r.id, name: r.name, min: r.min_rating, color: r.color };
+      });
+    }
+  } catch (e) {
+    console.warn("Groups load failed:", e);
+  }
+}
+
+/* ===== Render groups tab ===== */
+function renderGroupsTab() {
+  var container = document.getElementById("groupList");
+  if (!container) return;
+  container.innerHTML = "";
+
+  if (!GROUPS.length) {
+    container.innerHTML = '<p class="loading-msg">No groups found. Run the SQL setup in Supabase first.</p>';
+    return;
+  }
+
+  var frag = document.createDocumentFragment();
+  GROUPS.forEach(function(g) {
+    var row = document.createElement("div");
+    row.className = "group-row";
+    row.innerHTML =
+      '<label class="group-color-wrap" title="Click to change colour">' +
+        '<span class="group-color-swatch" style="background:' + escAttr(g.color) + ';"></span>' +
+        '<input class="group-color-input" type="color" value="' + escAttr(g.color) + '" />' +
+      '</label>' +
+      '<input class="group-name-input" type="text" value="' + escAttr(g.name) + '" placeholder="Group name" />' +
+      '<span class="group-min-label">Min rating:</span>' +
+      '<input class="group-min-input" type="number" value="' + g.min + '" min="0" step="1" />' +
+      '<button class="btn group-save-btn" type="button" style="font-size:13px;background:var(--accent);color:#0b0f14;font-weight:700;flex-shrink:0;">Save</button>';
+
+    // Live-update swatch as colour changes
+    row.querySelector(".group-color-input").addEventListener("input", function(e) {
+      row.querySelector(".group-color-swatch").style.background = e.target.value;
+    });
+
+    row.querySelector(".group-save-btn").addEventListener("click", function() {
+      var name     = row.querySelector(".group-name-input").value.trim();
+      var color    = row.querySelector(".group-color-input").value;
+      var min      = parseInt(row.querySelector(".group-min-input").value, 10);
+      if (!name) { alert("Name cannot be empty."); return; }
+      if (isNaN(min) || min < 0) { alert("Min rating must be a non-negative number."); return; }
+      saveGroup(g.id, name, min, color, g, row);
+    });
+
+    frag.appendChild(row);
+  });
+  container.appendChild(frag);
+}
+
+/* ===== Save group ===== */
+async function saveGroup(id, name, minRating, color, groupObj, rowEl) {
+  var saveBtn = rowEl.querySelector(".group-save-btn");
+  saveBtn.disabled = true; saveBtn.textContent = "Saving…";
+  try {
+    var res = await fetch(
+      SUPABASE.URL + "/rest/v1/rating_groups?id=eq." + id,
+      {
+        method: "PATCH",
+        headers: {
+          apikey: SUPABASE.KEY, Authorization: "Bearer " + SUPABASE.KEY,
+          "Content-Type": "application/json", Prefer: "return=representation",
+        },
+        body: JSON.stringify({ name: name, min_rating: minRating, color: color }),
+      }
+    );
+    if (!res.ok) { var errBody = await res.text(); throw new Error("HTTP " + res.status + ": " + errBody); }
+    groupObj.name  = name;
+    groupObj.min   = minRating;
+    groupObj.color = color;
+    GROUPS.sort(function(a, b) { return b.min - a.min; });
+    writeLog("Group updated", name + " — min:" + minRating + " color:" + color);
+    saveBtn.textContent = "✓ Saved";
+    setTimeout(function() {
+      saveBtn.disabled = false;
+      saveBtn.textContent = "Save";
+      renderGroupsTab();
+    }, 1400);
+  } catch (err) {
+    alert("Error: " + err.message);
+    saveBtn.disabled = false;
+    saveBtn.textContent = "Save";
+  }
 }
 
 /* ===== Load achievements ===== */
@@ -877,6 +975,39 @@ function renderDashboard() {
   var avgRating = ratings.length ? (ratings.reduce(function(s, r) { return s + r; }, 0) / ratings.length).toFixed(1) : "—";
   var maxRating = ratings.length ? Math.max.apply(null, ratings).toFixed(1) : "—";
 
+  /* ---- Current month activity ---- */
+  var latestDate = "";
+  st.players.forEach(function(p) {
+    if (p.series && p.series.length) {
+      var d = p.series[p.series.length - 1].date;
+      if (d > latestDate) latestDate = d;
+    }
+  });
+  var monthPrefix = latestDate ? latestDate.slice(0, 7) : new Date().toISOString().slice(0, 7);
+  var monthName   = latestDate
+    ? new Date(latestDate + "T00:00:00").toLocaleString("en", { month: "long", year: "numeric" })
+    : "—";
+
+  var gameDatesSet = new Set();
+  var playerActivity = st.players
+    .filter(function(p) { return !st.hiddenNicks.has(p.nick); })
+    .map(function(p) {
+      var month = (p.series || []).filter(function(e) { return e.date.startsWith(monthPrefix); });
+      // index 0 = synthetic start; everything from index 1 = actual game results
+      var gameDays = 0;
+      for (var i = 1; i < month.length; i++) {
+        gameDatesSet.add(month[i].date);
+        gameDays++;
+      }
+      return { nick: p.nick, gameDays: gameDays, played: gameDays > 0 };
+    })
+    .sort(function(a, b) { return b.gameDays - a.gameDays || a.nick.localeCompare(b.nick); });
+
+  var activeCnt   = playerActivity.filter(function(p) { return p.played; }).length;
+  var inactiveCnt = playerActivity.length - activeCnt;
+  var gameDaysCnt = gameDatesSet.size;
+
+  /* ---- Movers ---- */
   var withDelta = st.players
     .filter(function(p) { return p.series && p.series.length > 1; })
     .map(function(p) { return { nick: p.nick, delta7: calcDelta(p.series, 7) }; });
@@ -906,6 +1037,46 @@ function renderDashboard() {
     }).join("");
   }
 
+  /* ---- Activity: all months, rating-change based ---- */
+  var allMonthsSet = new Set();
+  st.players.forEach(function(p) {
+    (p.series || []).forEach(function(e) { allMonthsSet.add(e.date.slice(0, 7)); });
+  });
+  var sortedMonths = Array.from(allMonthsSet).sort().reverse();
+
+  function calcMonthActivity(prefix) {
+    return st.players                         // all players, including hidden
+      .map(function(p) {
+        var entries = (p.series || []).filter(function(e) { return e.date.startsWith(prefix); });
+        var playedDays = 0, zeroDays = 0;
+        for (var i = 1; i < entries.length; i++) {
+          var d = Math.abs(entries[i].rating - entries[i - 1].rating);
+          if (d > 0.001) playedDays++; else zeroDays++;
+        }
+        return { nick: p.nick, playedDays: playedDays, zeroDays: zeroDays };
+      })
+      .sort(function(a, b) { return b.playedDays - a.playedDays || a.nick.localeCompare(b.nick); });
+  }
+
+  function monthGridHtml(players) {
+    return players.map(function(p) {
+      var active = p.playedDays > 0;
+      var cls = active ? 'player-tile tile-active' : 'player-tile tile-inactive';
+      var stats = active
+        ? '<div class="tile-stat tile-played">' + p.playedDays + ' day' + (p.playedDays !== 1 ? 's' : '') + '</div>' +
+          (p.zeroDays > 0 ? '<div class="tile-stat tile-zero">○ ' + p.zeroDays + ' no Δ</div>' : '')
+        : '<div class="tile-stat tile-none">✗ no games</div>' +
+          (p.zeroDays > 0 ? '<div class="tile-stat tile-zero">○ ' + p.zeroDays + ' no Δ</div>' : '');
+      return '<div class="' + cls + '"><div class="tile-nick">' + escHtml(p.nick) + '</div>' + stats + '</div>';
+    }).join('');
+  }
+
+  /* summary for current month */
+  var curPlayers    = calcMonthActivity(monthPrefix);
+  var activeCnt     = curPlayers.filter(function(p) { return p.playedDays > 0; }).length;
+  var inactiveCnt   = curPlayers.length - activeCnt;
+  var totalPlayedDays = curPlayers.reduce(function(s, p) { return s + p.playedDays; }, 0);
+
   sec.innerHTML =
     '<div class="dash-grid">' +
       '<div class="dash-card"><div class="dash-card-val">' + visible + '</div><div class="dash-card-label">Visible players</div></div>' +
@@ -915,6 +1086,7 @@ function renderDashboard() {
       '<div class="dash-card"><div class="dash-card-val">' + achCount + '</div><div class="dash-card-label">Achievements</div></div>' +
       '<div class="dash-card"><div class="dash-card-val">' + totalBadges + '</div><div class="dash-card-label">Badges assigned</div></div>' +
     '</div>' +
+
     '<p class="dash-h3">📈 Top gainers (7 days)</p>' + moverHtml(gainers, true) +
     '<p class="dash-h3">📉 Top losers (7 days)</p>'  + moverHtml(losers, false) +
     '<p class="dash-h3">🎮 Group distribution</p>' +
@@ -928,7 +1100,125 @@ function renderDashboard() {
         '<span class="group-bar-count">' + g.count + '</span>' +
         '</div>';
     }).join("") +
+    '</div>' +
+
+    '<p class="dash-h3">📅 Activity by month</p>' +
+    '<div class="dash-grid" style="margin-bottom:14px;">' +
+      '<div class="dash-card"><div class="dash-card-val" style="color:#52d18a">' + totalPlayedDays + '</div><div class="dash-card-label">Game days (' + escHtml(monthName.split(' ')[0]) + ')</div></div>' +
+      '<div class="dash-card"><div class="dash-card-val" style="color:#52d18a">' + activeCnt + '</div><div class="dash-card-label">Players played</div></div>' +
+      '<div class="dash-card"><div class="dash-card-val" style="color:#ff7676">' + inactiveCnt + '</div><div class="dash-card-label">No games</div></div>' +
+    '</div>' +
+    '<div id="activityYears">' + buildActivityHtml(sortedMonths) + '</div>';
+
+  /* Toggle listeners — years and months */
+  sec.querySelectorAll('.year-toggle, .month-toggle').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var target = document.getElementById(btn.dataset.target);
+      var open = btn.classList.toggle('open');
+      if (target) target.classList.toggle('open', open);
+    });
+  });
+
+  /* CSV export per month */
+  sec.querySelectorAll('.act-csv-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      exportActivityCSV(btn.dataset.prefix, btn.dataset.label);
+    });
+  });
+}
+
+function exportActivityCSV(prefix, label) {
+  var players = calcMonthActivityGlobal(prefix);
+  var rows = [['Nickname', 'Played days', 'Not played days', 'Total days']];
+  players.forEach(function(p) {
+    rows.push([p.nick, p.playedDays, p.zeroDays, p.playedDays + p.zeroDays]);
+  });
+  var csv = rows.map(function(r) {
+    return r.map(function(c) {
+      var s = String(c);
+      return (s.includes(',') || s.includes('"') || s.includes('\n'))
+        ? '"' + s.replace(/"/g, '""') + '"' : s;
+    }).join(',');
+  }).join('\n');
+  var blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = 'activity_' + label.replace(/\s+/g, '_').toLowerCase() + '.csv';
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a); URL.revokeObjectURL(url);
+}
+
+function buildActivityHtml(sortedMonths) {
+  /* Group months by year */
+  var byYear = {};
+  sortedMonths.forEach(function(prefix) {
+    var year = prefix.slice(0, 4);
+    if (!byYear[year]) byYear[year] = [];
+    byYear[year].push(prefix);
+  });
+  var years = Object.keys(byYear).sort().reverse();
+
+  return years.map(function(year, yi) {
+    var isYearOpen = yi === 0;
+    var monthsHtml = byYear[year].map(function(prefix, mi) {
+      var d = new Date(prefix + '-01T00:00:00');
+      var label = d.toLocaleString('en', { month: 'long' });
+      var isMonthOpen = yi === 0 && mi === 0;
+      var players = calcMonthActivityGlobal(prefix);
+      return '<div class="month-section" style="margin-left:0;">' +
+        '<div class="month-toggle-row">' +
+          '<button class="month-toggle' + (isMonthOpen ? ' open' : '') + '" data-target="mgrid-' + prefix + '">' +
+            escHtml(label) +
+            '<span class="month-arrow">▼</span>' +
+          '</button>' +
+          '<button class="act-csv-btn btn" data-prefix="' + prefix + '" data-label="' + escAttr(label + ' ' + year) + '" style="font-size:12px;padding:5px 10px;flex-shrink:0;">📥 CSV</button>' +
+        '</div>' +
+        '<div class="month-grid' + (isMonthOpen ? ' open' : '') + '" id="mgrid-' + prefix + '">' +
+          monthGridHtmlGlobal(players) +
+        '</div>' +
+      '</div>';
+    }).join('');
+
+    return '<div class="year-section">' +
+      '<button class="year-toggle' + (isYearOpen ? ' open' : '') + '" data-target="ygrid-' + year + '">' +
+        '📆 ' + year +
+        '<span class="month-arrow">▼</span>' +
+      '</button>' +
+      '<div class="year-body' + (isYearOpen ? ' open' : '') + '" id="ygrid-' + year + '">' +
+        monthsHtml +
+      '</div>' +
     '</div>';
+  }).join('');
+}
+
+function calcMonthActivityGlobal(prefix) {
+  /* jshint ignore:start */
+  var players = typeof st !== 'undefined' ? st.players : [];
+  /* jshint ignore:end */
+  return players
+    .map(function(p) {
+      var entries = (p.series || []).filter(function(e) { return e.date.startsWith(prefix); });
+      var playedDays = 0, zeroDays = 0;
+      for (var i = 1; i < entries.length; i++) {
+        var d = Math.abs(entries[i].rating - entries[i - 1].rating);
+        if (d > 0.001) playedDays++; else zeroDays++;
+      }
+      return { nick: p.nick, playedDays: playedDays, zeroDays: zeroDays };
+    })
+    .sort(function(a, b) { return b.playedDays - a.playedDays || a.nick.localeCompare(b.nick); });
+}
+
+function monthGridHtmlGlobal(players) {
+  function escH(str) { return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  return players.map(function(p) {
+    var active = p.playedDays > 0;
+    var cls = active ? 'player-tile tile-active' : 'player-tile tile-inactive';
+    var stats =
+      '<div class="tile-stat tile-played">Played: ' + p.playedDays + '</div>' +
+      '<div class="tile-stat tile-none">Not played: ' + p.zeroDays + '</div>';
+    return '<div class="' + cls + '"><div class="tile-nick">' + escH(p.nick) + '</div>' + stats + '</div>';
+  }).join('');
 }
 
 /* ===== Boot ===== */
@@ -950,6 +1240,8 @@ document.addEventListener("DOMContentLoaded", function() {
   if (tabAch)     tabAch.addEventListener("click",     function() { switchTab("achievements"); });
   if (tabDash)    tabDash.addEventListener("click",    function() { switchTab("dashboard"); });
   if (tabLog)     tabLog.addEventListener("click",     function() { switchTab("log"); });
+  var tabGroups = document.getElementById("tabGroups");
+  if (tabGroups)  tabGroups.addEventListener("click",  function() { switchTab("groups"); });
 
   /* Export CSV button */
   var exportBtn = document.getElementById("exportCsvBtn");

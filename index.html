@@ -6,7 +6,7 @@
   <meta name="description" content="ESportsBattle public leaderboard and player rating history" />
   <meta name="theme-color" content="#0b0f14" />
   <title>ESportsBattle Rank</title>
-  <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+  <link rel="icon" href="./icons/favicon.svg" type="image/svg+xml" />
   <link rel="preconnect" href="https://script.google.com" crossorigin />
   <link rel="stylesheet" href="./css/styles.css" />
 </head>
@@ -132,13 +132,13 @@
 
   <!-- Avatar / Photo block -->
   <section class="card photoCard">
-    <h2>Player photo</h2>
     <div class="photoWrap">
       <img id="playerPhoto" alt="Player photo" loading="lazy" decoding="async" />
     </div>
     <div class="photoMeta">
       <div class="photoNick" id="photoNick">—</div>
       <div class="photoGroup" id="photoGroupRow">
+        <span class="group-label">Group:</span>
         <span class="groupDot" id="groupDot" aria-hidden="true"></span>
         <span class="groupName" id="groupName">—</span>
       </div>
@@ -150,7 +150,7 @@
 <button id="backToTop" class="back-to-top" type="button" aria-label="Back to top">↑</button>
 
 <footer>
-  <span>v0.5 — Public leaderboard</span>
+  <span>Created by Sfg_m</span>
 </footer>
 
 <script src="./js/app.js" defer></script>

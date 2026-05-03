@@ -19,15 +19,30 @@ const SUPABASE = Object.freeze({
   BUCKET: "player-avatars",
 });
 
-/* Static rating groups (admin removed — values fixed in code). */
-const GROUPS = Object.freeze([
+/* Rating groups — loaded from Supabase, defaults used as fallback. */
+let GROUPS = [
   { name: "Legend",       min: 1250, color: "#e53a2e" },
   { name: "Icon",         min: 1125, color: "#dab823" },
   { name: "Elite",        min: 1000, color: "#f0ff25" },
   { name: "Champion",     min:  875, color: "#20b839" },
   { name: "World Class",  min:  750, color: "#b8b8b8" },
   { name: "Professional", min:    0, color: "#7ec8ce" },
-]);
+];
+
+async function loadGroups() {
+  try {
+    const res = await fetch(
+      `${SUPABASE.URL}/rest/v1/rating_groups?select=name,min_rating,color&order=min_rating.desc`,
+      { headers: { apikey: SUPABASE.KEY, Authorization: `Bearer ${SUPABASE.KEY}` } }
+    );
+    const rows = await res.json();
+    if (Array.isArray(rows) && rows.length) {
+      GROUPS = rows.map((r) => ({ name: r.name, min: r.min_rating, color: r.color }));
+    }
+  } catch (e) {
+    console.warn("Groups load failed, using defaults");
+  }
+}
 
 /* ================== DOM REFS ================== */
 const $ = (id) => document.getElementById(id);
@@ -131,8 +146,92 @@ async function init() {
   initBackToTop();
 
   updateDeltaLabels();
+  await loadGroups();
   await loadData();
   handleDeepLink();
+}
+
+/* ================== SPRING PETALS ================== */
+function initSnow() {
+  const canvas = document.getElementById("snowCanvas");
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+
+  const COUNT = 55;
+  let petals = [];
+  let W = 0, H = 0;
+
+  // Soft spring petal colors
+  const COLORS = [
+    [255, 192, 203], // pink
+    [255, 182, 193], // light pink
+    [255, 218, 224], // pale pink
+    [255, 228, 196], // peach
+    [255, 240, 245], // lavender blush
+  ];
+
+  function resize() {
+    W = canvas.width  = window.innerWidth;
+    H = canvas.height = window.innerHeight;
+  }
+
+  function mkPetal(randomY = false) {
+    const c = COLORS[Math.floor(Math.random() * COLORS.length)];
+    return {
+      x:       Math.random() * W,
+      y:       randomY ? Math.random() * H : -20,
+      rx:      Math.random() * 6 + 4,   // petal width
+      ry:      Math.random() * 4 + 2,   // petal height
+      angle:   Math.random() * Math.PI * 2,
+      spin:    (Math.random() - 0.5) * 0.04,
+      speed:   Math.random() * 1.0 + 0.4,
+      drift:   Math.random() * 0.8 - 0.4,
+      wobble:  Math.random() * Math.PI * 2,
+      wobbleSpeed: Math.random() * 0.025 + 0.008,
+      opacity: Math.random() * 0.5 + 0.35,
+      color:   c,
+    };
+  }
+
+  resize();
+  window.addEventListener("resize", resize, { passive: true });
+  for (let i = 0; i < COUNT; i++) petals.push(mkPetal(true));
+
+  function drawPetal(p) {
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.rotate(p.angle);
+    ctx.beginPath();
+    ctx.ellipse(0, 0, p.rx, p.ry, 0, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(${p.color[0]},${p.color[1]},${p.color[2]},${p.opacity})`;
+    ctx.fill();
+    // Subtle inner highlight
+    ctx.beginPath();
+    ctx.ellipse(-p.rx * 0.15, -p.ry * 0.2, p.rx * 0.45, p.ry * 0.35, 0, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(255,255,255,${p.opacity * 0.35})`;
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function tick() {
+    ctx.clearRect(0, 0, W, H);
+
+    for (const p of petals) {
+      p.wobble += p.wobbleSpeed;
+      p.angle  += p.spin;
+      p.x += p.drift + Math.sin(p.wobble) * 0.7;
+      p.y += p.speed;
+
+      if (p.y > H + 20) Object.assign(p, mkPetal());
+      if (p.x >  W + 20) p.x = -20;
+      if (p.x < -20)     p.x =  W + 20;
+
+      drawPetal(p);
+    }
+
+    requestAnimationFrame(tick);
+  }
+  tick();
 }
 
 /* ================== BACK TO TOP ================== */
@@ -335,7 +434,7 @@ function selectPlayer(p) {
     }
   }
 
-  if (els.profileTitle) els.profileTitle.textContent = `Player: ${p.nick}`;
+  if (els.profileTitle) els.profileTitle.textContent = p.nick;
 
   const lastRating = p.series.at(-1)?.rating ?? null;
   if (els.currentRating) els.currentRating.textContent = fmt(lastRating, CONFIG.RATING_DIGITS);
