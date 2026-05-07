@@ -94,7 +94,7 @@ h1, h2, h3 { letter-spacing: -0.01em; }
 
 .grid {
   display: grid;
-  grid-template-columns: minmax(380px, 1.2fr) minmax(420px, 1.6fr) 280px;
+  grid-template-columns: minmax(340px, 1fr) minmax(480px, 2.2fr) 260px;
   gap: 16px;
   padding: 16px 0 28px;
 }
@@ -200,23 +200,29 @@ tbody tr.active { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(
 .stat strong { display: block; font-size: 18px; margin-top: 4px; font-variant-numeric: tabular-nums; }
 
 /* ========== Period switch ========== */
-.periodSwitch { display: flex; gap: 8px; }
-.periodSwitch button {
-  padding: 8px 12px; border-radius: var(--radius-sm);
-  border: 1px solid var(--soft-border); background: var(--soft-bg);
-  color: inherit; cursor: pointer; font: inherit;
-  transition: background var(--t) var(--ease), border-color var(--t) var(--ease);
+.dateRange {
+  display: flex; align-items: center; gap: 6px; flex-shrink: 0;
 }
-.periodSwitch button:hover { background: var(--hover-bg); }
-.periodSwitch button.active { border-color: var(--accent-border); background: var(--accent-soft); }
+.dateRange input[type="date"] {
+  padding: 6px 10px; border-radius: var(--radius-sm);
+  border: 1px solid var(--soft-border); background: var(--soft-bg);
+  color: inherit; font: inherit; font-size: 13px; cursor: pointer; outline: none;
+  transition: border-color var(--t) var(--ease), box-shadow var(--t) var(--ease);
+  color-scheme: dark;
+}
+.dateRange input[type="date"]:focus {
+  border-color: var(--accent-border);
+  box-shadow: 0 0 0 3px rgba(53,192,122,0.15);
+}
+.date-sep { opacity: 0.4; font-size: 13px; }
 
 /* ========== Chart ========== */
 .chartWrap {
-  position: relative; margin: 12px 0 6px; padding: 8px; height: 340px;
+  position: relative; margin: 12px 0 6px; padding: 8px; height: 420px;
   border-radius: var(--radius-md); border: 1px solid var(--card-border);
   background: var(--chart-bg);
 }
-@media (max-width: 1100px) { .chartWrap { height: 280px; } }
+@media (max-width: 1100px) { .chartWrap { height: 300px; } }
 #chart { display: block; width: 100%; height: 100%; cursor: crosshair; }
 .chartTip {
   position: absolute; z-index: 5;
@@ -232,22 +238,29 @@ tbody tr.active { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(
 .chartTip span { display: block; opacity: 0.7; font-size: 11px; }
 
 /* ========== History ========== */
-#history { list-style: none; padding: 0; margin: 0; max-height: 240px; overflow-y: auto; }
+#history { list-style: none; padding: 0; margin: 0; max-height: 320px; overflow-y: auto; }
 #history li {
-  display: flex; align-items: center; gap: 0;
+  display: flex; align-items: center;
   padding: 7px 0; border-bottom: 1px dashed var(--card-border);
   font-size: 13px; font-variant-numeric: tabular-nums;
 }
 #history li:last-child { border-bottom: none; }
 #history li span:first-child {
-  flex: 0 0 175px;
+  flex: 1;
   color: rgba(255, 255, 255, 0.50);
   font-size: 12px;
 }
 #history li span:last-child {
-  flex: 1;
+  flex: 2;
   text-align: left;
   white-space: nowrap;
+}
+.hist-rank {
+  flex: 1;
+  font-size: 12px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.35);
+  text-align: left;
 }
 .hist-arrow {
   color: var(--accent);
@@ -296,6 +309,11 @@ tbody tr.active { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(
 .ach-badge--link { text-decoration: none; cursor: pointer; }
 .ach-badge--link img { border-color: rgba(53, 210, 110, 0.7); box-shadow: 0 0 8px rgba(53, 210, 110, 0.25); }
 .ach-badge--link:hover img { border-color: rgba(53, 210, 110, 1); box-shadow: 0 0 16px rgba(53, 210, 110, 0.5); }
+
+/* ========== Telegram share button ========== */
+.tg-share-btn { font-size: 12px; padding: 6px 10px; opacity: 0.7; transition: opacity var(--t) var(--ease), background var(--t) var(--ease); }
+.tg-share-btn:hover { opacity: 1; background: rgba(41,182,246,0.12); border-color: rgba(41,182,246,0.4); color: #29b6f6; }
+.tg-share-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
 /* ========== Footer ========== */
 footer { padding: 14px 0 20px; text-align: center; opacity: 0.7; border-top: 1px solid var(--footer-border); font-size: 13px; }

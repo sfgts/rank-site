@@ -215,7 +215,7 @@ async function loadAdminData() {
 /* ===== Tab switching ===== */
 function switchTab(tab) {
   st.currentTab = tab;
-  var tabIds = ["players", "achievements", "dashboard", "log", "groups"];
+  var tabIds = ["players", "achievements", "dashboard", "log", "groups", "telegram"];
   tabIds.forEach(function(key) {
     var btn = document.getElementById("tab" + key.charAt(0).toUpperCase() + key.slice(1));
     var sec = document.getElementById("section" + key.charAt(0).toUpperCase() + key.slice(1));
@@ -1231,6 +1231,155 @@ if (adminSearch) adminSearch.addEventListener("input", debounce(function() {
   st.searchQuery = adminSearch.value; renderList();
 }, 120));
 
+/* ===== Telegram settings ===== */
+function loadTelegramSettings() {
+  var tokenInput   = document.getElementById("tgBotToken");
+  var chatInput    = document.getElementById("tgChatId");
+  var defaultInput = document.getElementById("tgDefaultCaption");
+  if (tokenInput)   tokenInput.value   = localStorage.getItem("tg_bot_token")       || "";
+  if (chatInput)    chatInput.value    = localStorage.getItem("tg_chat_id")         || "";
+  if (defaultInput) defaultInput.value = localStorage.getItem("tg_default_caption") || "";
+}
+function saveTelegramSettings() {
+  var token   = (document.getElementById("tgBotToken")?.value        || "").trim();
+  var chatId  = (document.getElementById("tgChatId")?.value          || "").trim();
+  var defCap  = (document.getElementById("tgDefaultCaption")?.value  || "").trim();
+  if (!token || !chatId) { alert("Fill in both Bot Token and Chat ID."); return; }
+  localStorage.setItem("tg_bot_token",       token);
+  localStorage.setItem("tg_chat_id",         chatId);
+  localStorage.setItem("tg_default_caption", defCap);
+  var msg = document.getElementById("tgSaveMsg");
+  if (msg) { msg.style.display = "block"; setTimeout(function() { msg.style.display = "none"; }, 2500); }
+}
+
+function get1DayChange(series) {
+  if (!series || series.length < 2) return null;
+  var last = series[series.length - 1];
+  var lastDate = new Date(last.date + "T00:00:00");
+  var monthStart = new Date(lastDate.getFullYear(), lastDate.getMonth(), 1);
+  var monthEntries = series.filter(function(p) { return new Date(p.date + "T00:00:00") >= monthStart; });
+  if (monthEntries.length < 2) return null;
+  // target = 1 day before last, capped at month start
+  var target = new Date(lastDate);
+  target.setDate(target.getDate() - 1);
+  var effectiveFrom = target >= monthStart ? target : monthStart;
+  var base = monthEntries[0];
+  for (var i = 0; i < monthEntries.length - 1; i++) {
+    if (new Date(monthEntries[i].date + "T00:00:00") <= effectiveFrom) base = monthEntries[i];
+  }
+  if (base === last) return null;
+  return { from: base.rating, to: last.rating, delta: last.rating - base.rating };
+}
+
+function renderTgLeaderboard() {
+  var el = document.getElementById("tgCaptureArea");
+  if (!el) return;
+
+  var sorted = st.players
+    .filter(function(p) { return !st.hiddenNicks.has(p.nick) && p.series && p.series.length; })
+    .map(function(p) {
+      var last = p.series[p.series.length - 1];
+      var change = get1DayChange(p.series);
+      return { nick: p.nick, rating: last.rating, change: change };
+    })
+    .sort(function(a, b) { return b.rating - a.rating; });
+
+  var rowsHtml = sorted.map(function(p, i) {
+    var rank = i + 1;
+    var bg = rank === 1 ? "rgba(255,215,0,0.08)" : rank === 2 ? "rgba(180,200,230,0.08)" : rank === 3 ? "rgba(205,127,50,0.08)" : "transparent";
+    var fw = rank <= 3 ? "700" : "400";
+
+    var changeHtml = "";
+    if (p.change) {
+      var d = p.change.delta;
+      var sign = d > 0 ? "+" : "";
+      var col  = d > 0 ? "#52d18a" : d < 0 ? "#ff7676" : "rgba(255,255,255,0.45)";
+      var dStr = sign + d.toFixed(1);
+      changeHtml = '<span style="font-size:12px;color:rgba(255,255,255,0.40);font-variant-numeric:tabular-nums;margin-right:6px;">'
+        + p.change.from.toFixed(1) + ' → ' + p.change.to.toFixed(1)
+        + '</span>'
+        + '<span style="font-size:13px;font-weight:700;font-variant-numeric:tabular-nums;color:' + col + ';min-width:52px;text-align:right;">' + dStr + '</span>';
+    } else {
+      changeHtml = '<span style="font-size:14px;font-weight:700;font-variant-numeric:tabular-nums;color:#35c07a;">' + p.rating.toFixed(1) + '</span>';
+    }
+
+    return '<div style="display:flex;align-items:center;padding:8px 14px;background:' + bg + ';border-bottom:1px solid rgba(255,255,255,0.06);">'
+      + '<span style="width:28px;font-size:12px;color:rgba(255,255,255,0.40);font-weight:700;">' + rank + '</span>'
+      + '<span style="flex:1;font-size:14px;font-weight:' + fw + ';color:#e9edf5;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escHtml(p.nick) + '</span>'
+      + '<span style="display:flex;align-items:center;gap:0;">' + changeHtml + '</span>'
+      + '</div>';
+  }).join("");
+
+  var now = new Date().toLocaleDateString("uk-UA", { day: "2-digit", month: "long", year: "numeric" });
+  el.innerHTML = '<div style="font-family:ui-sans-serif,system-ui,-apple-system,sans-serif;background:#0b0f14;color:#e9edf5;width:460px;border-radius:16px;overflow:hidden;border:1px solid rgba(255,255,255,0.10);">'
+    + '<div style="padding:14px 18px 10px;border-bottom:1px solid rgba(255,255,255,0.08);display:flex;align-items:center;justify-content:space-between;">'
+    +   '<div style="font-size:16px;font-weight:700;letter-spacing:-0.01em;">ESportsBattle Leaderboard</div>'
+    +   '<div style="font-size:12px;color:rgba(255,255,255,0.40);">' + now + '</div>'
+    + '</div>'
+    + rowsHtml
+    + '<div style="padding:8px 14px;font-size:11px;color:rgba(255,255,255,0.20);text-align:right;">esportsbattle.rank</div>'
+    + '</div>';
+}
+
+function escHtml(str) {
+  return String(str).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+
+async function sendLeaderboardFromAdmin() {
+  var token  = localStorage.getItem("tg_bot_token");
+  var chatId = localStorage.getItem("tg_chat_id");
+  if (!token || !chatId) { alert("Save Bot Token and Chat ID first (⚙️ Bot Settings above)."); return; }
+  if (typeof html2canvas === "undefined") { alert("html2canvas not loaded yet, please wait."); return; }
+  if (!st.players.length) { alert("Player data not loaded yet. Please wait."); return; }
+
+  var btn    = document.getElementById("tgSendBtn");
+  var errEl  = document.getElementById("tgSendErr");
+  var okEl   = document.getElementById("tgSendMsg");
+  var origTxt = btn ? btn.textContent : "";
+  if (btn) { btn.disabled = true; btn.textContent = "Rendering…"; }
+  if (errEl) errEl.style.display = "none";
+  if (okEl)  okEl.style.display  = "none";
+
+  try {
+    renderTgLeaderboard();
+    var captureEl = document.getElementById("tgCaptureArea");
+    // briefly make visible off-screen for html2canvas
+    captureEl.style.left = "-9999px";
+    captureEl.style.visibility = "visible";
+    if (btn) btn.textContent = "Capturing…";
+
+    var canvas = await html2canvas(captureEl.firstChild, {
+      backgroundColor: "#0b0f14",
+      scale: 2,
+      useCORS: true,
+      logging: false,
+    });
+    captureEl.style.visibility = "hidden";
+
+    var blob = await new Promise(function(res) { canvas.toBlob(res, "image/png"); });
+    var caption = (document.getElementById("tgCaption")?.value || "").trim()
+                  || localStorage.getItem("tg_default_caption") || "";
+    var form = new FormData();
+    form.append("chat_id", chatId);
+    form.append("photo", blob, "leaderboard.png");
+    if (caption) form.append("caption", caption);
+
+    if (btn) btn.textContent = "Sending…";
+    var res  = await fetch("https://api.telegram.org/bot" + token + "/sendPhoto", { method: "POST", body: form });
+    var data = await res.json();
+
+    if (data.ok) {
+      if (okEl) { okEl.style.display = "block"; setTimeout(function() { okEl.style.display = "none"; }, 3000); }
+    } else {
+      if (errEl) { errEl.textContent = "Telegram error: " + (data.description || "unknown"); errEl.style.display = "block"; }
+    }
+  } catch(err) {
+    if (errEl) { errEl.textContent = "Error: " + err.message; errEl.style.display = "block"; }
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = origTxt; }
+  }
+}
+
 document.addEventListener("DOMContentLoaded", function() {
   /* Tab buttons */
   var tabPlayers = document.getElementById("tabPlayers");
@@ -1243,6 +1392,27 @@ document.addEventListener("DOMContentLoaded", function() {
   if (tabLog)     tabLog.addEventListener("click",     function() { switchTab("log"); });
   var tabGroups = document.getElementById("tabGroups");
   if (tabGroups)  tabGroups.addEventListener("click",  function() { switchTab("groups"); });
+  var tabTelegram = document.getElementById("tabTelegram");
+  if (tabTelegram) tabTelegram.addEventListener("click", function() { switchTab("telegram"); loadTelegramSettings(); });
+
+  /* Telegram eye-toggle buttons */
+  document.querySelectorAll(".tg-eye-btn").forEach(function(btn) {
+    btn.addEventListener("click", function() {
+      var input = document.getElementById(btn.dataset.target);
+      if (!input) return;
+      var isHidden = input.type === "password";
+      input.type = isHidden ? "text" : "password";
+      btn.classList.toggle("active", isHidden);
+      btn.textContent = isHidden ? "🙈" : "👁";
+    });
+  });
+
+  /* Telegram save button */
+  var tgSaveBtn = document.getElementById("tgSaveBtn");
+  if (tgSaveBtn) tgSaveBtn.addEventListener("click", saveTelegramSettings);
+  /* Telegram send button */
+  var tgSendBtn = document.getElementById("tgSendBtn");
+  if (tgSendBtn) tgSendBtn.addEventListener("click", sendLeaderboardFromAdmin);
 
   /* Export CSV button */
   var exportBtn = document.getElementById("exportCsvBtn");

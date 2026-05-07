@@ -94,10 +94,10 @@
   <section class="card">
     <div class="card-head">
       <h2 id="profileTitle">Select a player</h2>
-      <div id="periodSwitch" class="periodSwitch" role="tablist" aria-label="Period">
-        <button data-days="7" class="active" type="button" role="tab">7d</button>
-        <button data-days="14" type="button" role="tab">14d</button>
-        <button data-days="30" type="button" role="tab">30d</button>
+      <div id="periodSwitch" class="dateRange">
+        <input type="date" id="dateFrom" title="From" />
+        <span class="date-sep">—</span>
+        <input type="date" id="dateTo" title="To" />
       </div>
     </div>
 
@@ -144,6 +144,7 @@
   <span>Created by Sfg_m</span>
 </footer>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
 <script src="./js/app.js" defer></script>
 <script>
   (function() {

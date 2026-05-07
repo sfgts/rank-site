@@ -59,7 +59,8 @@ const els = {
   history:       $("history"),
   chart:         $("chart"),
   chartTip:      $("chartTip"),
-  periodButtons: document.querySelectorAll("#periodSwitch button"),
+  dateFrom:      $("dateFrom"),
+  dateTo:        $("dateTo"),
 
   playerPhoto:        $("playerPhoto"),
   photoNick:          $("photoNick"),
@@ -90,7 +91,8 @@ const state = {
   players: [],
   hiddenNicks: new Set(),
   selected: null,
-  periodDays: 7,
+  dateFrom: "",
+  dateTo:   "",
   globalRows: [],
   globalRankByNick: new Map(),
   chartRAF: 0,
@@ -108,18 +110,17 @@ async function init() {
   els.refresh?.addEventListener("click", loadData);
   els.search?.addEventListener("input", debounce(onSearch, 120));
 
-  els.periodButtons.forEach((btn) => {
-    btn.addEventListener("click", () => {
-      els.periodButtons.forEach((b) => b.classList.remove("active"));
-      btn.classList.add("active");
-      state.periodDays = Number(btn.dataset.days);
-      renderTable();
-      if (state.selected) {
-        const p = state.players.find((x) => x.nick === state.selected.nick);
-        if (p) selectPlayer(p);
-      }
-    });
-  });
+  const onRangeChange = () => {
+    state.dateFrom = els.dateFrom?.value || "";
+    state.dateTo   = els.dateTo?.value   || "";
+    renderTable();
+    if (state.selected) {
+      const p = state.players.find((x) => x.nick === state.selected.nick);
+      if (p) selectPlayer(p);
+    }
+  };
+  els.dateFrom?.addEventListener("change", onRangeChange);
+  els.dateTo?.addEventListener("change",   onRangeChange);
 
   // Resize → redraw chart without re-animating
   window.addEventListener("resize", debounce(() => {
@@ -133,6 +134,8 @@ async function init() {
 
   setupChartHover();
 
+  document.getElementById("tgShareBtn")?.addEventListener("click", sendLeaderboardToTelegram);
+
   els.compareClose?.addEventListener("click", closeCompareModal);
   els.compareModal?.querySelector(".compare-backdrop")?.addEventListener("click", closeCompareModal);
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeCompareModal(); });
@@ -142,6 +145,47 @@ async function init() {
   await loadGroups();
   await loadData();
   handleDeepLink();
+}
+
+/* ================== TELEGRAM SHARE ================== */
+async function sendLeaderboardToTelegram() {
+  const token  = localStorage.getItem("tg_bot_token");
+  const chatId = localStorage.getItem("tg_chat_id");
+  if (!token || !chatId) {
+    alert("Configure Telegram settings in the Admin panel first (Admin → 📱 Telegram tab).");
+    return;
+  }
+  if (typeof html2canvas === "undefined") {
+    alert("html2canvas not loaded yet, please wait a moment and try again.");
+    return;
+  }
+  const btn = document.getElementById("tgShareBtn");
+  const originalText = btn?.textContent || "📷 Telegram";
+  if (btn) { btn.disabled = true; btn.textContent = "Sending…"; }
+  try {
+    const card = document.getElementById("leaderboardCard");
+    const canvas = await html2canvas(card, {
+      backgroundColor: "#0b0f14",
+      scale: 2,
+      useCORS: true,
+      logging: false,
+    });
+    const blob = await new Promise((res) => canvas.toBlob(res, "image/png"));
+    const form = new FormData();
+    form.append("chat_id", chatId);
+    form.append("photo", blob, "leaderboard.png");
+    const res  = await fetch(`https://api.telegram.org/bot${token}/sendPhoto`, { method: "POST", body: form });
+    const data = await res.json();
+    if (data.ok) {
+      if (btn) { btn.textContent = "✓ Sent!"; setTimeout(() => { btn.textContent = originalText; btn.disabled = false; }, 2500); }
+    } else {
+      alert("Telegram error: " + (data.description || "unknown error"));
+      if (btn) { btn.textContent = originalText; btn.disabled = false; }
+    }
+  } catch (err) {
+    alert("Error: " + err.message);
+    if (btn) { btn.textContent = originalText; btn.disabled = false; }
+  }
 }
 
 /* ================== BACK TO TOP ================== */
@@ -185,6 +229,23 @@ async function loadData() {
         .sort((a, b) => a.date.localeCompare(b.date)),
     }));
     buildGlobalRanking();
+
+    // Set default date range to current month
+    if (!state.dateFrom && !state.dateTo) {
+      let lastDate = "";
+      state.players.forEach((p) => {
+        const d = p.series.at(-1)?.date ?? "";
+        if (d > lastDate) lastDate = d;
+      });
+      if (lastDate) {
+        const monthStart = lastDate.slice(0, 7) + "-01";
+        state.dateFrom = monthStart;
+        state.dateTo   = lastDate;
+        if (els.dateFrom) els.dateFrom.value = monthStart;
+        if (els.dateTo)   els.dateTo.value   = lastDate;
+      }
+    }
+
     renderTable();
     autoSelectTop();
   } catch (err) {
@@ -244,9 +305,8 @@ function buildGlobalRanking() {
     .map((p) => ({
       ...p,
       rating: p.series.at(-1)?.rating ?? null,
-      deltaPeriod: calcDelta(p.series, state.periodDays),
       delta1: calcDelta(p.series, 1),
-      delta7: calcDelta(p.series, 7),
+      delta7: calcMonthDelta(p.series, 7),
     }))
     .sort((a, b) => (b.rating ?? -Infinity) - (a.rating ?? -Infinity));
 
@@ -363,7 +423,7 @@ function selectPlayer(p) {
     }
   }
 
-  const seriesWindow = sliceByDays(p.series, state.periodDays);
+  const seriesWindow = sliceByRange(p.series, state.dateFrom, state.dateTo);
   renderHistory(seriesWindow);
   drawChartAnimated(seriesWindow);
 }
@@ -563,6 +623,21 @@ function renderAchievements(achievements) {
 }
 
 /* ================== HISTORY ================== */
+/* Returns rank (1-based) of the given rating among all players on a given date */
+function getRankOnDate(date, rating) {
+  let higher = 0;
+  for (const player of state.players) {
+    if (!player.series || !player.series.length) continue;
+    // Find last series entry on or before this date
+    let r = null;
+    for (let i = player.series.length - 1; i >= 0; i--) {
+      if (player.series[i].date <= date) { r = player.series[i].rating; break; }
+    }
+    if (r != null && r > rating + 0.001) higher++;
+  }
+  return higher + 1;
+}
+
 function renderHistory(series) {
   if (!els.history) return;
   els.history.innerHTML = "";
@@ -587,14 +662,17 @@ function renderHistory(series) {
   reversed.forEach((p, idx) => {
     const prevEntry = reversed[idx + 1];
     const prevRating = prevEntry != null ? (prevEntry.endRating ?? prevEntry.rating) : null;
+    const endRating = p.endRating ?? p.rating;
+    const rank = getRankOnDate(p.date, endRating);
+    const rankHtml = `<span class="hist-rank">#${rank}</span>`;
     const li = document.createElement("li");
 
     if (p.startRating != null) {
-      // Merged start → end entry (game played on 1st of month)
       const delta = p.endRating - p.startRating;
       const cls = deltaClass(delta);
       li.innerHTML = `
         <span>${escapeHtml(p.date)}</span>
+        ${rankHtml}
         <span>${fmt(p.startRating, CONFIG.RATING_DIGITS)}<span class="hist-arrow">→</span>${fmt(p.endRating, CONFIG.RATING_DIGITS)} <span class="${cls}">(${formatDelta(delta, CONFIG.DELTA_DIGITS)})</span></span>
       `;
     } else if (prevRating != null) {
@@ -602,11 +680,13 @@ function renderHistory(series) {
       const cls = deltaClass(delta);
       li.innerHTML = `
         <span>${escapeHtml(p.date)}</span>
+        ${rankHtml}
         <span>${fmt(prevRating, CONFIG.RATING_DIGITS)}<span class="hist-arrow">→</span>${fmt(p.rating, CONFIG.RATING_DIGITS)} <span class="${cls}">(${formatDelta(delta, CONFIG.DELTA_DIGITS)})</span></span>
       `;
     } else {
       li.innerHTML = `
         <span>${escapeHtml(p.date)}</span>
+        ${rankHtml}
         <span>${fmt(p.rating, CONFIG.RATING_DIGITS)}</span>
       `;
     }
@@ -921,13 +1001,36 @@ function hideChartTip() {
 }
 
 /* ================== HELPERS ================== */
-function sliceByDays(series, days) {
-  if (!series.length) return [];
+function sliceByRange(series, from, to) {
+  if (!series.length) return series;
+  return series.filter((p) => {
+    if (from && p.date < from) return false;
+    if (to   && p.date > to)   return false;
+    return true;
+  });
+}
+
+/* Month-capped delta — stays within the current month (used for Player of the Week) */
+function calcMonthDelta(series, days) {
+  if (!series || series.length < 2) return null;
   const last = series.at(-1);
-  const lastDate = new Date(last.date);
-  const from = new Date(lastDate);
-  from.setDate(from.getDate() - days);
-  return series.filter((p) => new Date(p.date) >= from);
+  const lastDate = new Date(last.date + "T00:00:00");
+  const monthStart = new Date(lastDate.getFullYear(), lastDate.getMonth(), 1);
+  const monthEntries = series.filter((p) => new Date(p.date + "T00:00:00") >= monthStart);
+  if (monthEntries.length < 2) return null;
+
+  const target = new Date(lastDate);
+  target.setDate(target.getDate() - days);
+  const effectiveFrom = target > monthStart ? target : monthStart;
+
+  let base = monthEntries[0];
+  if (effectiveFrom > monthStart) {
+    for (let i = 0; i < monthEntries.length - 1; i++) {
+      if (new Date(monthEntries[i].date + "T00:00:00") <= effectiveFrom) base = monthEntries[i];
+    }
+  }
+  if (base === last) return null;
+  return last.rating - base.rating;
 }
 
 function calcDelta(series, days) {

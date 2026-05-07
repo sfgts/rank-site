@@ -199,3 +199,22 @@ html, body { overflow-x: hidden; }
 .ach-edit-label { font-size:11px; opacity:0.55; text-transform:uppercase; letter-spacing:0.04em; }
 .ach-edit-input { padding:8px 12px; border-radius:var(--radius-sm); border:1px solid var(--soft-border); background:var(--soft-bg); color:inherit; font:inherit; outline:none; }
 .ach-edit-input:focus { border-color:var(--accent-border); box-shadow:0 0 0 3px rgba(53,192,122,0.15); }
+
+/* ===== Telegram settings ===== */
+.tg-block { background:var(--card-bg); border:1px solid var(--card-border); border-radius:var(--radius-md); padding:18px 20px; max-width:520px; }
+.tg-block-title { font-size:14px; font-weight:700; margin-bottom:2px; }
+.tg-settings { display:flex; flex-direction:column; gap:14px; }
+.tg-label { display:block; font-size:12px; opacity:0.7; margin-bottom:6px; text-transform:uppercase; letter-spacing:0.04em; }
+.tg-input { width:100%; padding:10px 12px; border-radius:var(--radius-sm); border:1px solid var(--soft-border); background:var(--soft-bg); color:inherit; font:inherit; font-size:14px; outline:none; transition:border-color var(--t) var(--ease),box-shadow var(--t) var(--ease); }
+.tg-input:focus { border-color:var(--accent-border); box-shadow:0 0 0 3px rgba(53,192,122,0.15); }
+.tg-textarea { resize:vertical; min-height:72px; line-height:1.5; }
+.tg-secret-wrap { position:relative; display:flex; align-items:center; }
+.tg-secret-wrap .tg-input { padding-right:40px; }
+.tg-eye-btn {
+  position:absolute; right:10px;
+  background:none; border:none; cursor:pointer;
+  font-size:16px; opacity:0.4; padding:0; line-height:1;
+  transition:opacity var(--t) var(--ease);
+}
+.tg-eye-btn:hover { opacity:0.9; }
+.tg-eye-btn.active { opacity:0.85; }
